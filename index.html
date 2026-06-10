@@ -1,0 +1,385 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Cat Head Tracker</title>
+    <style>
+      :root {
+        --ink: #181816;
+        --paper: #ede8d8;
+        --grid: rgba(24, 24, 22, 0.08);
+        --accent: #2f7b74;
+        --ember: #b9653e;
+        --pet-size: min(78vmin, 384px);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        width: 100%;
+        height: 100%;
+      }
+
+      body {
+        margin: 0;
+        overflow: hidden;
+        color: var(--ink);
+        background:
+          linear-gradient(90deg, var(--grid) 1px, transparent 1px),
+          linear-gradient(0deg, var(--grid) 1px, transparent 1px),
+          linear-gradient(135deg, #f4f0e3 0%, #e8e2cf 42%, #d7dfd1 100%);
+        background-size: 28px 28px, 28px 28px, 100% 100%;
+        cursor: none;
+      }
+
+      .stage {
+        position: fixed;
+        inset: 0;
+        display: grid;
+        place-items: center;
+        isolation: isolate;
+      }
+
+      .stage::before {
+        content: "";
+        position: absolute;
+        inset: 9vmin;
+        border: 1px solid rgba(24, 24, 22, 0.16);
+        clip-path: polygon(0 0, 100% 0, 100% calc(100% - 34px), calc(100% - 34px) 100%, 0 100%);
+        opacity: 0.65;
+        pointer-events: none;
+      }
+
+      .pet-wrap {
+        position: relative;
+        width: var(--pet-size);
+        height: var(--pet-size);
+        transform: translateZ(0);
+      }
+
+      .pet-shadow {
+        position: absolute;
+        left: 12%;
+        right: 12%;
+        bottom: 7%;
+        height: 14%;
+        border-radius: 50%;
+        background: rgba(24, 24, 22, 0.28);
+        filter: blur(20px);
+        transform: scaleX(0.9);
+        z-index: -1;
+      }
+
+      .pet {
+        --col: 0;
+        --row: 0;
+        width: 100%;
+        height: 100%;
+        background-image: url("sprite.webp");
+        background-repeat: no-repeat;
+        background-size: calc(var(--pet-size) * 16) calc(var(--pet-size) * 17);
+        background-position:
+          calc(var(--col) * var(--pet-size) * -1)
+          calc(var(--row) * var(--pet-size) * -1);
+        image-rendering: auto;
+        filter: drop-shadow(0 16px 26px rgba(24, 24, 22, 0.2));
+        transition: filter 160ms ease;
+      }
+
+      .pet.is-listening {
+        filter: drop-shadow(0 18px 28px rgba(24, 24, 22, 0.22));
+      }
+
+      .cursor {
+        position: fixed;
+        left: 0;
+        top: 0;
+        width: 48px;
+        height: 48px;
+        pointer-events: none;
+        transform: translate(-50%, -50%);
+        filter: drop-shadow(0 5px 8px rgba(24, 24, 22, 0.2));
+      }
+
+      .cursor::before {
+        content: "🐟";
+        position: absolute;
+        inset: 0;
+        display: grid;
+        place-items: center;
+        font-size: 34px;
+        line-height: 1;
+        transform: rotate(45deg);
+        transform-origin: center;
+      }
+
+      noscript {
+        position: fixed;
+        inset: 0;
+        display: grid;
+        place-items: center;
+      }
+
+      noscript img {
+        width: var(--pet-size);
+        height: var(--pet-size);
+      }
+    </style>
+  </head>
+  <body>
+    <main class="stage" aria-label="cat desktop pet">
+      <div class="pet-wrap" id="petWrap">
+        <div class="pet-shadow" aria-hidden="true"></div>
+        <div class="pet" id="pet" role="img" aria-label="cat"></div>
+      </div>
+      <div class="cursor" id="cursor" aria-hidden="true"></div>
+    </main>
+    <noscript><img src="frame_front.webp" alt="cat" /></noscript>
+
+    <script>
+      const FRAME_COUNT = 271;
+      const COLUMNS = 16;
+      const FRONT_FRAME = 130;
+      const HEAD_ANCHOR = { x: 0.5, y: 0.34 };
+      const ANGLE_SMOOTHING = 0.28;
+      const ANGLE_JITTER_EPSILON = 0.28;
+      const CENTER_DEAD_ZONE = 0.16;
+      const TOP_LOCK_ENTER_DEGREES = 0;
+      const TOP_LOCK_EXIT_DEGREES = 0;
+      const TOP_FRAME = 270;
+      const tracking = {
+        targetAngle: null,
+        displayAngle: null,
+        active: false,
+        topLocked: false,
+        lastFrame: FRONT_FRAME
+      };
+
+      /*
+        Calibrated from _sprite_work/new30_contact_keyed_step5.jpg:
+        frame 270/0 = up loop seam, 75 = right,
+        130 = front/down center, 180 = left.
+        This is a hand-authored table from the actual frame sheet, not
+        angle / 360 * frameCount.
+        Angles are visual clockwise angles:
+        0 up, 90 right, 180 down, 270 left.
+        The first and last poses are close enough to use the video's loop
+        seam; interpolateFrame wraps through frame 270 -> 0 smoothly.
+      */
+      const ANGLE_KEYS = [
+        { angle: 0, frame: 270, name: "up" },
+        { angle: 20, frame: 20, name: "up" },
+        { angle: 35, frame: 35, name: "up-right" },
+        { angle: 45, frame: 50, name: "up-right" },
+        { angle: 70, frame: 65, name: "right" },
+        { angle: 90, frame: 75, name: "right" },
+        { angle: 115, frame: 90, name: "down-right" },
+        { angle: 135, frame: 100, name: "down-right" },
+        { angle: 160, frame: 115, name: "down" },
+        { angle: 180, frame: 130, name: "down" },
+        { angle: 205, frame: 140, name: "down-left" },
+        { angle: 225, frame: 150, name: "down-left" },
+        { angle: 250, frame: 165, name: "left" },
+        { angle: 270, frame: 180, name: "left" },
+        { angle: 295, frame: 195, name: "up-left" },
+        { angle: 315, frame: 210, name: "up-left" },
+        { angle: 340, frame: 235, name: "up" },
+        { angle: 360, frame: 270, name: "up" }
+      ];
+
+      const pet = document.getElementById("pet");
+      const petWrap = document.getElementById("petWrap");
+      const cursor = document.getElementById("cursor");
+
+      function mod(value, base) {
+        return ((value % base) + base) % base;
+      }
+
+      function interpolateFrame(a, b, t) {
+        let delta = b.frame - a.frame;
+        if (Math.abs(delta) > FRAME_COUNT / 2) {
+          delta += delta < 0 ? FRAME_COUNT : -FRAME_COUNT;
+        }
+        return mod(Math.round(a.frame + delta * t), FRAME_COUNT);
+      }
+
+      function unwrapAngle(angle, reference) {
+        if (reference === null) return angle;
+        let delta = angle - mod(reference, 360);
+        if (delta > 180) delta -= 360;
+        if (delta < -180) delta += 360;
+        return reference + delta;
+      }
+
+      function signedDistanceFromZero(angle) {
+        const normalized = mod(angle, 360);
+        return normalized > 180 ? normalized - 360 : normalized;
+      }
+
+      function isTopLocked(angle) {
+        const topDistance = Math.abs(signedDistanceFromZero(angle));
+        if (tracking.topLocked) {
+          if (topDistance > TOP_LOCK_EXIT_DEGREES) {
+            tracking.topLocked = false;
+          }
+        } else if (topDistance <= TOP_LOCK_ENTER_DEGREES) {
+          tracking.topLocked = true;
+        }
+        return tracking.topLocked;
+      }
+
+      function setTargetAngle(angle) {
+        const reference = tracking.targetAngle ?? tracking.displayAngle;
+        tracking.targetAngle = unwrapAngle(angle, reference);
+        if (tracking.displayAngle === null) {
+          tracking.displayAngle = tracking.targetAngle;
+        }
+        tracking.active = true;
+      }
+
+      function frameForAngle(angle) {
+        const normalized = mod(angle, 360);
+        if (isTopLocked(normalized)) {
+          return TOP_FRAME;
+        }
+        for (let i = 0; i < ANGLE_KEYS.length - 1; i += 1) {
+          const a = ANGLE_KEYS[i];
+          const b = ANGLE_KEYS[i + 1];
+          if (normalized >= a.angle && normalized <= b.angle) {
+            if (b.snap) {
+              return normalized < b.angle ? a.frame : b.frame;
+            }
+            return interpolateFrame(a, b, (normalized - a.angle) / (b.angle - a.angle));
+          }
+        }
+        return FRONT_FRAME;
+      }
+
+      function nearestDirection(angle) {
+        const normalized = mod(angle, 360);
+        let best = ANGLE_KEYS[0];
+        let bestDistance = Infinity;
+        for (const key of ANGLE_KEYS.slice(0, -1)) {
+          const distance = Math.abs(mod(normalized - key.angle + 180, 360) - 180);
+          if (distance < bestDistance) {
+            best = key;
+            bestDistance = distance;
+          }
+        }
+        return best.name;
+      }
+
+      function setFrame(frame, direction = "front") {
+        const index = mod(frame, FRAME_COUNT);
+        pet.style.setProperty("--col", index % COLUMNS);
+        pet.style.setProperty("--row", Math.floor(index / COLUMNS));
+        pet.dataset.frame = String(index);
+        pet.dataset.direction = direction;
+        tracking.lastFrame = index;
+      }
+
+      function headPoint(rect) {
+        return {
+          x: rect.left + rect.width * HEAD_ANCHOR.x,
+          y: rect.top + rect.height * HEAD_ANCHOR.y
+        };
+      }
+
+      function updateFromPoint(x, y) {
+        const rect = petWrap.getBoundingClientRect();
+        const head = headPoint(rect);
+        const dx = x - head.x;
+        const dy = y - head.y;
+        const distance = Math.hypot(dx, dy);
+
+        cursor.style.transform = `translate(${x}px, ${y}px) translate(-50%, -50%)`;
+
+        if (distance < rect.width * CENTER_DEAD_ZONE) {
+          pet.classList.remove("is-listening");
+          tracking.active = false;
+          tracking.targetAngle = null;
+          tracking.displayAngle = null;
+          tracking.topLocked = false;
+          setFrame(FRONT_FRAME, "front");
+          return;
+        }
+
+        const screenAngle = mod((Math.atan2(dy, dx) * 180) / Math.PI, 360);
+        const angle = mod(screenAngle + 90, 360);
+        setTargetAngle(angle);
+        pet.classList.add("is-listening");
+      }
+
+      function animateTracking() {
+        if (tracking.active && tracking.targetAngle !== null && tracking.displayAngle !== null) {
+          const delta = tracking.targetAngle - tracking.displayAngle;
+          if (Math.abs(delta) > ANGLE_JITTER_EPSILON) {
+            tracking.displayAngle += delta * ANGLE_SMOOTHING;
+          } else {
+            tracking.displayAngle = tracking.targetAngle;
+          }
+          setFrame(frameForAngle(tracking.displayAngle), nearestDirection(tracking.displayAngle));
+        }
+        requestAnimationFrame(animateTracking);
+      }
+
+      function setDirectionForTest(name) {
+        const rect = petWrap.getBoundingClientRect();
+        const head = headPoint(rect);
+        const radius = rect.width * 0.48;
+        const points = {
+          center: [head.x, head.y],
+          up: [head.x, head.y - radius],
+          right: [head.x + radius, head.y],
+          down: [head.x, head.y + radius],
+          left: [head.x - radius, head.y],
+          "left-up": [head.x - radius, head.y - radius],
+          "left-down": [head.x - radius, head.y + radius],
+          "up-left": [head.x - radius, head.y - radius],
+          "down-left": [head.x - radius, head.y + radius]
+        };
+        const point = points[name];
+        if (!point) return;
+        updateFromPoint(point[0], point[1]);
+      }
+
+      window.addEventListener("pointermove", (event) => {
+        updateFromPoint(event.clientX, event.clientY);
+      });
+
+      window.addEventListener("pointerleave", () => {
+        tracking.topLocked = false;
+        setFrame(FRONT_FRAME, "front");
+      });
+
+      window.__catDebug = {
+        ANGLE_KEYS,
+        HEAD_ANCHOR,
+        frameForAngle,
+        setDirection: setDirectionForTest,
+        getState: () => ({
+          frame: Number(pet.dataset.frame),
+          direction: pet.dataset.direction,
+          angle: tracking.displayAngle === null ? null : mod(tracking.displayAngle, 360),
+          continuousAngle: tracking.displayAngle,
+          targetAngle: tracking.targetAngle,
+          topLocked: tracking.topLocked,
+          col: Number(getComputedStyle(pet).getPropertyValue("--col")),
+          row: Number(getComputedStyle(pet).getPropertyValue("--row"))
+        })
+      };
+
+      setFrame(FRONT_FRAME, "front");
+      requestAnimationFrame(() => {
+        const rect = petWrap.getBoundingClientRect();
+        const head = headPoint(rect);
+        updateFromPoint(head.x, head.y);
+        animateTracking();
+      });
+    </script>
+  </body>
+</html>
