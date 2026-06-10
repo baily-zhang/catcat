@@ -1,0 +1,47 @@
+{
+  "name": "catcat-desktop-pet",
+  "version": "0.1.0",
+  "description": "Transparent macOS desktop pet built with Electron and local HTML/CSS/JS.",
+  "author": "Catcat",
+  "main": "main.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "electron .",
+    "pack": "electron-builder --dir",
+    "dist": "electron-builder --mac zip",
+    "dist:dmg": "electron-builder --mac dmg"
+  },
+  "devDependencies": {
+    "electron": "^33.4.11",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "com.local.catcat",
+    "productName": "Catcat",
+    "artifactName": "${productName}-${version}-${arch}.${ext}",
+    "asar": true,
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "pet.html",
+      "panel.html",
+      "sprite.webp",
+      "frame_front.webp",
+      "README.md",
+      "package.json"
+    ],
+    "mac": {
+      "category": "public.app-category.entertainment",
+      "target": [
+        "dmg",
+        "zip"
+      ]
+    },
+    "dmg": {
+      "artifactName": "${productName}-${version}-${arch}.${ext}"
+    }
+  }
+}
