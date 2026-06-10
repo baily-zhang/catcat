@@ -1,0 +1,417 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Catcat Pet</title>
+    <style>
+      :root {
+        --pet-size: 100vmin;
+        --hit-padding: 72px;
+        --ink: #221d18;
+        --panel: rgba(255, 252, 241, 0.92);
+        --line: rgba(42, 35, 26, 0.16);
+        --accent: #2f7b74;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        width: 100%;
+        height: 100%;
+      }
+
+      body {
+        margin: 0;
+        overflow: hidden;
+        color: var(--ink);
+        background: transparent;
+        cursor: none;
+        user-select: none;
+        -webkit-user-select: none;
+      }
+
+      .pet-shell {
+        position: fixed;
+        inset: 0;
+        display: grid;
+        place-items: center;
+        padding: var(--hit-padding);
+      }
+
+      .pet {
+        --col: 2;
+        --row: 8;
+        position: relative;
+        width: 100%;
+        aspect-ratio: 1;
+        background-repeat: no-repeat;
+        background-size: calc(100% * 16) calc(100% * 17);
+        background-position:
+          calc(var(--col) * 100% / 15)
+          calc(var(--row) * 100% / 16);
+        filter: drop-shadow(0 16px 20px rgba(34, 29, 24, 0.18));
+        transform-origin: 50% 88%;
+        animation: idle-breathe 3.8s ease-in-out infinite;
+      }
+
+      .media {
+        width: 100%;
+        aspect-ratio: 1;
+        object-fit: contain;
+        filter: drop-shadow(0 16px 20px rgba(34, 29, 24, 0.18));
+        animation: idle-breathe 3.8s ease-in-out infinite;
+      }
+
+      .hidden {
+        display: none;
+      }
+
+      .bubble {
+        position: absolute;
+        left: 50%;
+        top: 7%;
+        max-width: min(86%, 280px);
+        padding: 9px 12px;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        background: var(--panel);
+        box-shadow: 0 10px 30px rgba(34, 29, 24, 0.14);
+        font: 600 13px/1.35 ui-rounded, "SF Pro Rounded", "PingFang SC", system-ui, sans-serif;
+        opacity: 0;
+        pointer-events: none;
+        transform: translate(-50%, -8px) scale(0.98);
+        transition: opacity 160ms ease, transform 160ms ease;
+      }
+
+      .bubble.is-visible {
+        opacity: 1;
+        transform: translate(-50%, 0) scale(1);
+      }
+
+      .dock {
+        position: absolute;
+        left: 50%;
+        bottom: 4%;
+        display: flex;
+        gap: 7px;
+        max-width: 92%;
+        transform: translate(-50%, 8px);
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 140ms ease, transform 140ms ease;
+      }
+
+      body:hover .dock,
+      .dock:focus-within {
+        opacity: 1;
+        pointer-events: auto;
+        transform: translate(-50%, 0);
+      }
+
+      .fish-cursor {
+        position: fixed;
+        left: 0;
+        top: 0;
+        width: 42px;
+        height: 42px;
+        z-index: 30;
+        opacity: 0;
+        pointer-events: none;
+        transform: translate(-50%, -50%);
+        filter: drop-shadow(0 5px 8px rgba(34, 29, 24, 0.22));
+        transition: opacity 80ms ease;
+      }
+
+      body.is-hovering .fish-cursor {
+        opacity: 1;
+      }
+
+      .fish-cursor::before {
+        content: "🐟";
+        position: absolute;
+        inset: 0;
+        display: grid;
+        place-items: center;
+        font-size: 30px;
+        line-height: 1;
+        transform: rotate(45deg);
+        transform-origin: center;
+      }
+
+      button {
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        color: var(--ink);
+        background: var(--panel);
+        box-shadow: 0 8px 24px rgba(34, 29, 24, 0.12);
+        font: 700 12px/1 ui-rounded, "SF Pro Rounded", "PingFang SC", system-ui, sans-serif;
+      }
+
+      .action {
+        min-width: 42px;
+        height: 32px;
+        padding: 0 11px;
+      }
+
+      .gear {
+        width: 32px;
+        height: 32px;
+        padding: 0;
+      }
+
+      button:active {
+        transform: translateY(1px);
+      }
+
+      @keyframes idle-breathe {
+        0%,
+        100% {
+          transform: translateY(0) scale(1);
+        }
+        50% {
+          transform: translateY(-2px) scale(1.006);
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="pet-shell" id="shell">
+      <div class="pet" id="spritePet" role="img" aria-label="desktop pet"></div>
+      <img class="media hidden" id="imagePet" alt="desktop pet" draggable="false" />
+      <video class="media hidden" id="videoPet" autoplay loop muted playsinline></video>
+      <div class="bubble" id="bubble"></div>
+      <div class="fish-cursor" id="fishCursor" aria-hidden="true"></div>
+      <div class="dock" id="dock">
+        <button class="gear" id="settingsBtn" title="控制面板" type="button">⚙</button>
+      </div>
+    </main>
+
+    <script>
+      const FRAME_COUNT = 271;
+      const COLUMNS = 16;
+      const FRONT_FRAME = 130;
+      const HEAD_ANCHOR = { x: 0.5, y: 0.34 };
+      const ANGLE_SMOOTHING = 0.24;
+      const CENTER_DEAD_ZONE = 0.17;
+      const ANGLE_KEYS = [
+        { angle: 0, frame: 270, name: "up" },
+        { angle: 20, frame: 20, name: "up" },
+        { angle: 35, frame: 35, name: "up-right" },
+        { angle: 45, frame: 50, name: "up-right" },
+        { angle: 70, frame: 65, name: "right" },
+        { angle: 90, frame: 75, name: "right" },
+        { angle: 115, frame: 90, name: "down-right" },
+        { angle: 135, frame: 100, name: "down-right" },
+        { angle: 160, frame: 115, name: "down" },
+        { angle: 180, frame: 130, name: "down" },
+        { angle: 205, frame: 140, name: "down-left" },
+        { angle: 225, frame: 150, name: "down-left" },
+        { angle: 250, frame: 165, name: "left" },
+        { angle: 270, frame: 180, name: "left" },
+        { angle: 295, frame: 195, name: "up-left" },
+        { angle: 315, frame: 210, name: "up-left" },
+        { angle: 340, frame: 235, name: "up" },
+        { angle: 360, frame: 270, name: "up" }
+      ];
+
+      const spritePet = document.getElementById("spritePet");
+      const imagePet = document.getElementById("imagePet");
+      const videoPet = document.getElementById("videoPet");
+      const bubble = document.getElementById("bubble");
+      const dock = document.getElementById("dock");
+      const settingsBtn = document.getElementById("settingsBtn");
+      const fishCursor = document.getElementById("fishCursor");
+
+      let config = null;
+      let targetAngle = null;
+      let displayAngle = null;
+      let bubbleTimer = null;
+      let idleTimer = null;
+      let dragging = null;
+
+      function mod(value, base) {
+        return ((value % base) + base) % base;
+      }
+
+      function interpolateFrame(a, b, t) {
+        let delta = b.frame - a.frame;
+        if (Math.abs(delta) > FRAME_COUNT / 2) {
+          delta += delta < 0 ? FRAME_COUNT : -FRAME_COUNT;
+        }
+        return mod(Math.round(a.frame + delta * t), FRAME_COUNT);
+      }
+
+      function frameForAngle(angle) {
+        const normalized = mod(angle, 360);
+        for (let i = 0; i < ANGLE_KEYS.length - 1; i += 1) {
+          const a = ANGLE_KEYS[i];
+          const b = ANGLE_KEYS[i + 1];
+          if (normalized >= a.angle && normalized <= b.angle) {
+            return interpolateFrame(a, b, (normalized - a.angle) / (b.angle - a.angle));
+          }
+        }
+        return FRONT_FRAME;
+      }
+
+      function unwrapAngle(angle, reference) {
+        if (reference === null) return angle;
+        let delta = angle - mod(reference, 360);
+        if (delta > 180) delta -= 360;
+        if (delta < -180) delta += 360;
+        return reference + delta;
+      }
+
+      function setFrame(frame) {
+        const index = mod(frame, FRAME_COUNT);
+        spritePet.style.setProperty("--col", index % COLUMNS);
+        spritePet.style.setProperty("--row", Math.floor(index / COLUMNS));
+      }
+
+      function setBubble(text) {
+        if (!text) return;
+        bubble.textContent = text;
+        bubble.classList.add("is-visible");
+        clearTimeout(bubbleTimer);
+        bubbleTimer = setTimeout(() => bubble.classList.remove("is-visible"), 3200);
+      }
+
+      function renderButtons() {
+        dock.querySelectorAll(".action").forEach((node) => node.remove());
+        const buttons = (config && config.buttons) || [];
+        for (const button of buttons) {
+          const node = document.createElement("button");
+          node.className = "action";
+          node.type = "button";
+          node.textContent = button.label;
+          node.addEventListener("click", async (event) => {
+            event.stopPropagation();
+            setBubble(await window.catcat.interact(button.id));
+          });
+          dock.appendChild(node);
+        }
+      }
+
+      function renderAsset() {
+        const asset = config.activeAsset;
+        spritePet.classList.add("hidden");
+        imagePet.classList.add("hidden");
+        videoPet.classList.add("hidden");
+        videoPet.pause();
+
+        if (asset.kind === "sprite") {
+          spritePet.style.backgroundImage = `url("${asset.url}")`;
+          setFrame(FRONT_FRAME);
+          spritePet.classList.remove("hidden");
+        } else if (asset.kind === "video") {
+          videoPet.src = asset.url;
+          videoPet.classList.remove("hidden");
+          videoPet.play().catch(() => {});
+        } else {
+          imagePet.src = asset.url;
+          imagePet.classList.remove("hidden");
+        }
+      }
+
+      function resetIdleTimer() {
+        clearInterval(idleTimer);
+        if (!config || !config.idle.enabled) return;
+        const ms = Math.max(10, Number(config.idle.intervalSeconds || 45)) * 1000;
+        idleTimer = setInterval(async () => {
+          setBubble(await window.catcat.randomReply());
+        }, ms);
+      }
+
+      function applyConfig(nextConfig) {
+        config = nextConfig;
+        document.documentElement.style.setProperty("--hit-padding", `${config.hitPadding || 72}px`);
+        renderAsset();
+        renderButtons();
+        resetIdleTimer();
+      }
+
+      function updateFishCursor(event) {
+        fishCursor.style.left = `${event.clientX}px`;
+        fishCursor.style.top = `${event.clientY}px`;
+        document.body.classList.add("is-hovering");
+      }
+
+      function updateAngleFromPointer(event) {
+        if (!config || config.activeAsset.kind !== "sprite") return;
+        const rect = spritePet.getBoundingClientRect();
+        const head = {
+          x: rect.left + rect.width * HEAD_ANCHOR.x,
+          y: rect.top + rect.height * HEAD_ANCHOR.y
+        };
+        const dx = event.clientX - head.x;
+        const dy = event.clientY - head.y;
+        if (Math.hypot(dx, dy) < rect.width * CENTER_DEAD_ZONE) {
+          targetAngle = null;
+          displayAngle = null;
+          setFrame(FRONT_FRAME);
+          return;
+        }
+        const screenAngle = mod((Math.atan2(dy, dx) * 180) / Math.PI, 360);
+        const visualAngle = mod(screenAngle + 90, 360);
+        targetAngle = unwrapAngle(visualAngle, targetAngle ?? displayAngle);
+        if (displayAngle === null) displayAngle = targetAngle;
+      }
+
+      function animate() {
+        if (targetAngle !== null && displayAngle !== null) {
+          displayAngle += (targetAngle - displayAngle) * ANGLE_SMOOTHING;
+          setFrame(frameForAngle(displayAngle));
+        }
+        requestAnimationFrame(animate);
+      }
+
+      function startDrag(event) {
+        if (event.button !== 0 || event.target.closest("button")) return;
+        dragging = { x: event.screenX, y: event.screenY };
+        document.body.setPointerCapture(event.pointerId);
+      }
+
+      async function moveDrag(event) {
+        updateFishCursor(event);
+        updateAngleFromPointer(event);
+        if (!dragging) return;
+        const dx = event.screenX - dragging.x;
+        const dy = event.screenY - dragging.y;
+        dragging = { x: event.screenX, y: event.screenY };
+        await window.catcat.moveBy(dx, dy);
+      }
+
+      document.addEventListener("pointerdown", startDrag);
+      document.addEventListener("pointermove", moveDrag);
+      document.addEventListener("pointerenter", updateFishCursor);
+      document.addEventListener("pointerup", () => {
+        dragging = null;
+      });
+      document.addEventListener("pointerleave", () => {
+        document.body.classList.remove("is-hovering");
+        targetAngle = null;
+        displayAngle = null;
+        setFrame(FRONT_FRAME);
+      });
+      document.addEventListener("click", async (event) => {
+        if (event.target.closest("button")) return;
+        setBubble(await window.catcat.randomReply());
+      });
+      document.addEventListener("contextmenu", (event) => {
+        event.preventDefault();
+        window.catcat.openPanel();
+      });
+      settingsBtn.addEventListener("click", (event) => {
+        event.stopPropagation();
+        window.catcat.openPanel();
+      });
+
+      window.catcat.onConfigChanged(applyConfig);
+      window.catcat.getConfig().then(applyConfig);
+      requestAnimationFrame(animate);
+    </script>
+  </body>
+</html>

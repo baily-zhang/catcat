@@ -1,0 +1,377 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Catcat Control</title>
+    <style>
+      :root {
+        --ink: #211c16;
+        --muted: #766d61;
+        --paper: #f4f0e5;
+        --panel: #fffdf6;
+        --line: rgba(33, 28, 22, 0.14);
+        --accent: #2f7b74;
+        --danger: #a94332;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        color: var(--ink);
+        background:
+          linear-gradient(90deg, rgba(33, 28, 22, 0.045) 1px, transparent 1px),
+          linear-gradient(0deg, rgba(33, 28, 22, 0.045) 1px, transparent 1px),
+          var(--paper);
+        background-size: 24px 24px, 24px 24px, auto;
+        font: 14px/1.45 "SF Pro Text", "PingFang SC", system-ui, sans-serif;
+      }
+
+      main {
+        max-width: 980px;
+        margin: 0 auto;
+        padding: 28px;
+      }
+
+      header {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 18px;
+        margin-bottom: 18px;
+      }
+
+      h1 {
+        margin: 0 0 4px;
+        font-size: 24px;
+        letter-spacing: 0;
+      }
+
+      p {
+        margin: 0;
+        color: var(--muted);
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: 1.1fr 0.9fr;
+        gap: 16px;
+      }
+
+      section {
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: rgba(255, 253, 246, 0.88);
+        box-shadow: 0 16px 42px rgba(33, 28, 22, 0.08);
+      }
+
+      .section-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 16px 16px 12px;
+        border-bottom: 1px solid var(--line);
+      }
+
+      h2 {
+        margin: 0;
+        font-size: 15px;
+      }
+
+      .body {
+        padding: 16px;
+      }
+
+      button {
+        border: 1px solid var(--line);
+        border-radius: 7px;
+        padding: 9px 12px;
+        color: var(--ink);
+        background: #fffaf0;
+        font-weight: 700;
+      }
+
+      button.primary {
+        color: white;
+        border-color: transparent;
+        background: var(--accent);
+      }
+
+      button.danger {
+        color: var(--danger);
+      }
+
+      button:disabled {
+        opacity: 0.5;
+      }
+
+      .asset-list {
+        display: grid;
+        gap: 8px;
+      }
+
+      .asset {
+        display: grid;
+        grid-template-columns: 1fr auto auto;
+        align-items: center;
+        gap: 8px;
+        padding: 10px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: rgba(255, 255, 255, 0.58);
+      }
+
+      .asset strong {
+        display: block;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .asset span {
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      label {
+        display: grid;
+        gap: 8px;
+        margin-bottom: 14px;
+        font-weight: 700;
+      }
+
+      input[type="range"] {
+        width: 100%;
+      }
+
+      input[type="number"] {
+        width: 120px;
+        border: 1px solid var(--line);
+        border-radius: 7px;
+        padding: 8px 10px;
+        background: #fffdf8;
+      }
+
+      textarea {
+        width: 100%;
+        min-height: 130px;
+        resize: vertical;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 10px;
+        color: var(--ink);
+        background: #fffdf8;
+        font: 13px/1.5 ui-monospace, "SFMono-Regular", Menlo, monospace;
+      }
+
+      .row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+      }
+
+      .save-state {
+        min-height: 18px;
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      @media (max-width: 760px) {
+        .grid {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <div>
+          <h1>Catcat Control</h1>
+          <p>素材、互动和显示大小会实时同步到桌面宠物。</p>
+        </div>
+        <button class="primary" id="uploadBtn" type="button">上传素材</button>
+      </header>
+
+      <div class="grid">
+        <section>
+          <div class="section-head">
+            <h2>素材</h2>
+            <span class="save-state" id="assetState"></span>
+          </div>
+          <div class="body">
+            <div class="asset-list" id="assetList"></div>
+          </div>
+        </section>
+
+        <section>
+          <div class="section-head">
+            <h2>显示</h2>
+            <span class="save-state" id="sizeValue"></span>
+          </div>
+          <div class="body">
+            <label>
+              宠物大小
+              <input id="sizeInput" type="range" min="180" max="560" step="10" />
+            </label>
+            <div class="row">
+              <label style="margin: 0;">
+                闲置消息
+                <input id="idleEnabled" type="checkbox" />
+              </label>
+              <label style="margin: 0;">
+                间隔秒数
+                <input id="idleInterval" type="number" min="10" max="600" step="5" />
+              </label>
+            </div>
+          </div>
+        </section>
+
+        <section>
+          <div class="section-head">
+            <h2>互动按钮</h2>
+            <span class="save-state">每行：按钮名 | 回复</span>
+          </div>
+          <div class="body">
+            <textarea id="buttonsInput" spellcheck="false"></textarea>
+          </div>
+        </section>
+
+        <section>
+          <div class="section-head">
+            <h2>随机回复</h2>
+            <span class="save-state">每行一条</span>
+          </div>
+          <div class="body">
+            <textarea id="repliesInput" spellcheck="false"></textarea>
+          </div>
+        </section>
+      </div>
+    </main>
+
+    <script>
+      const assetList = document.getElementById("assetList");
+      const uploadBtn = document.getElementById("uploadBtn");
+      const sizeInput = document.getElementById("sizeInput");
+      const sizeValue = document.getElementById("sizeValue");
+      const idleEnabled = document.getElementById("idleEnabled");
+      const idleInterval = document.getElementById("idleInterval");
+      const buttonsInput = document.getElementById("buttonsInput");
+      const repliesInput = document.getElementById("repliesInput");
+      const assetState = document.getElementById("assetState");
+
+      let config = null;
+      let saveTimer = null;
+      let hydrating = false;
+
+      function buttonLines(buttons) {
+        return buttons.map((button) => `${button.label} | ${button.reply}`).join("\n");
+      }
+
+      function parseButtonLines(value) {
+        return value
+          .split("\n")
+          .map((line, index) => {
+            const [label, ...rest] = line.split("|");
+            return {
+              id: config.buttons[index] ? config.buttons[index].id : undefined,
+              label: (label || "").trim(),
+              reply: rest.join("|").trim()
+            };
+          })
+          .filter((button) => button.label && button.reply);
+      }
+
+      function renderAssets() {
+        assetList.innerHTML = "";
+        for (const asset of config.assets) {
+          const item = document.createElement("div");
+          item.className = "asset";
+
+          const info = document.createElement("div");
+          info.innerHTML = `<strong></strong><span></span>`;
+          info.querySelector("strong").textContent = asset.label;
+          info.querySelector("span").textContent = asset.kind === "sprite" ? "内置 sprite" : asset.kind;
+
+          const select = document.createElement("button");
+          select.type = "button";
+          select.textContent = asset.id === config.activeAssetId ? "使用中" : "使用";
+          select.disabled = asset.id === config.activeAssetId;
+          select.addEventListener("click", async () => {
+            assetState.textContent = "切换中";
+            await window.catcat.selectAsset(asset.id);
+          });
+
+          const remove = document.createElement("button");
+          remove.type = "button";
+          remove.className = "danger";
+          remove.textContent = "删除";
+          remove.disabled = Boolean(asset.bundled);
+          remove.addEventListener("click", async () => {
+            assetState.textContent = "删除中";
+            await window.catcat.deleteAsset(asset.id);
+          });
+
+          item.append(info, select, remove);
+          assetList.appendChild(item);
+        }
+      }
+
+      function hydrate(nextConfig) {
+        hydrating = true;
+        config = nextConfig;
+        renderAssets();
+        sizeInput.value = config.window.size;
+        sizeValue.textContent = `${config.window.size}px`;
+        idleEnabled.checked = Boolean(config.idle.enabled);
+        idleInterval.value = config.idle.intervalSeconds;
+        buttonsInput.value = buttonLines(config.buttons);
+        repliesInput.value = config.replies.join("\n");
+        assetState.textContent = "";
+        hydrating = false;
+      }
+
+      function scheduleSave() {
+        if (hydrating) return;
+        clearTimeout(saveTimer);
+        saveTimer = setTimeout(async () => {
+          const patch = {
+            window: { size: Number(sizeInput.value) },
+            idle: {
+              enabled: idleEnabled.checked,
+              intervalSeconds: Number(idleInterval.value)
+            },
+            buttons: parseButtonLines(buttonsInput.value),
+            replies: repliesInput.value.split("\n").map((line) => line.trim()).filter(Boolean)
+          };
+          config = await window.catcat.updateSettings(patch);
+          sizeValue.textContent = `${config.window.size}px`;
+        }, 160);
+      }
+
+      uploadBtn.addEventListener("click", async () => {
+        assetState.textContent = "上传中";
+        config = await window.catcat.uploadAssets();
+        hydrate(config);
+      });
+
+      sizeInput.addEventListener("input", () => {
+        sizeValue.textContent = `${sizeInput.value}px`;
+        window.catcat.setSize(Number(sizeInput.value));
+        scheduleSave();
+      });
+      idleEnabled.addEventListener("change", scheduleSave);
+      idleInterval.addEventListener("input", scheduleSave);
+      buttonsInput.addEventListener("input", scheduleSave);
+      repliesInput.addEventListener("input", scheduleSave);
+
+      window.catcat.onConfigChanged(hydrate);
+      window.catcat.getConfig().then(hydrate);
+    </script>
+  </body>
+</html>
