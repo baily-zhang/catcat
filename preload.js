@@ -1,6 +1,6 @@
 const { contextBridge, ipcRenderer } = require("electron");
 
-contextBridge.exposeInMainWorld("catcat", {
+const petsonaApi = {
   getConfig: () => ipcRenderer.invoke("config:get"),
   openPanel: () => ipcRenderer.invoke("panel:open"),
   moveBy: (dx, dy) => ipcRenderer.invoke("pet:move-by", { dx, dy }),
@@ -16,4 +16,7 @@ contextBridge.exposeInMainWorld("catcat", {
     ipcRenderer.on("config:changed", handler);
     return () => ipcRenderer.removeListener("config:changed", handler);
   }
-});
+};
+
+contextBridge.exposeInMainWorld("petsona", petsonaApi);
+contextBridge.exposeInMainWorld("catcat", petsonaApi);

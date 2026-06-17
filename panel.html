@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Catcat Control</title>
+    <title>Petsona Control</title>
     <style>
       :root {
         --ink: #211c16;
@@ -192,8 +192,8 @@
     <main>
       <header>
         <div>
-          <h1>Catcat Control</h1>
-          <p>素材、互动和显示大小会实时同步到桌面宠物。</p>
+          <h1>Petsona Control</h1>
+          <p>素材、互动和显示大小会实时同步到桌面陪伴。</p>
         </div>
         <button class="primary" id="uploadBtn" type="button">上传素材</button>
       </header>
@@ -304,7 +304,7 @@
           select.disabled = asset.id === config.activeAssetId;
           select.addEventListener("click", async () => {
             assetState.textContent = "切换中";
-            await window.catcat.selectAsset(asset.id);
+            await window.petsona.selectAsset(asset.id);
           });
 
           const remove = document.createElement("button");
@@ -314,7 +314,7 @@
           remove.disabled = Boolean(asset.bundled);
           remove.addEventListener("click", async () => {
             assetState.textContent = "删除中";
-            await window.catcat.deleteAsset(asset.id);
+            await window.petsona.deleteAsset(asset.id);
           });
 
           item.append(info, select, remove);
@@ -349,20 +349,20 @@
             buttons: parseButtonLines(buttonsInput.value),
             replies: repliesInput.value.split("\n").map((line) => line.trim()).filter(Boolean)
           };
-          config = await window.catcat.updateSettings(patch);
+          config = await window.petsona.updateSettings(patch);
           sizeValue.textContent = `${config.window.size}px`;
         }, 160);
       }
 
       uploadBtn.addEventListener("click", async () => {
         assetState.textContent = "上传中";
-        config = await window.catcat.uploadAssets();
+        config = await window.petsona.uploadAssets();
         hydrate(config);
       });
 
       sizeInput.addEventListener("input", () => {
         sizeValue.textContent = `${sizeInput.value}px`;
-        window.catcat.setSize(Number(sizeInput.value));
+        window.petsona.setSize(Number(sizeInput.value));
         scheduleSave();
       });
       idleEnabled.addEventListener("change", scheduleSave);
@@ -370,8 +370,8 @@
       buttonsInput.addEventListener("input", scheduleSave);
       repliesInput.addEventListener("input", scheduleSave);
 
-      window.catcat.onConfigChanged(hydrate);
-      window.catcat.getConfig().then(hydrate);
+      window.petsona.onConfigChanged(hydrate);
+      window.petsona.getConfig().then(hydrate);
     </script>
   </body>
 </html>

@@ -1,8 +1,8 @@
 {
-  "name": "catcat-desktop-pet",
+  "name": "petsona-player",
   "version": "0.1.0",
-  "description": "Transparent macOS desktop pet built with Electron and local HTML/CSS/JS.",
-  "author": "Catcat",
+  "description": "Transparent macOS desktop companion player for Pet Packs.",
+  "author": "Petsona",
   "main": "main.js",
   "type": "commonjs",
   "scripts": {
@@ -16,8 +16,8 @@
     "electron-builder": "^25.1.8"
   },
   "build": {
-    "appId": "com.local.catcat",
-    "productName": "Catcat",
+    "appId": "com.petsona.player",
+    "productName": "Petsona",
     "artifactName": "${productName}-${version}-${arch}.${ext}",
     "asar": true,
     "directories": {

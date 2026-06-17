@@ -39,7 +39,7 @@ function defaultConfig() {
     assets: [
       {
         id: DEFAULT_ASSET_ID,
-        label: "默认猫猫",
+        label: "默认宠物",
         kind: "sprite",
         bundled: true,
         sprite: "sprite.webp",
@@ -183,7 +183,7 @@ function createPanelWindow() {
     height: 640,
     minWidth: 680,
     minHeight: 560,
-    title: "Catcat Control",
+    title: "Petsona Control",
     show: false,
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),

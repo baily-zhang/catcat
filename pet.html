@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Catcat Pet</title>
+    <title>Petsona Pet</title>
     <style>
       :root {
         --pet-size: 100vmin;
@@ -289,7 +289,7 @@
           node.textContent = button.label;
           node.addEventListener("click", async (event) => {
             event.stopPropagation();
-            setBubble(await window.catcat.interact(button.id));
+            setBubble(await window.petsona.interact(button.id));
           });
           dock.appendChild(node);
         }
@@ -321,7 +321,7 @@
         if (!config || !config.idle.enabled) return;
         const ms = Math.max(10, Number(config.idle.intervalSeconds || 45)) * 1000;
         idleTimer = setInterval(async () => {
-          setBubble(await window.catcat.randomReply());
+          setBubble(await window.petsona.randomReply());
         }, ms);
       }
 
@@ -381,7 +381,7 @@
         const dx = event.screenX - dragging.x;
         const dy = event.screenY - dragging.y;
         dragging = { x: event.screenX, y: event.screenY };
-        await window.catcat.moveBy(dx, dy);
+        await window.petsona.moveBy(dx, dy);
       }
 
       document.addEventListener("pointerdown", startDrag);
@@ -398,19 +398,19 @@
       });
       document.addEventListener("click", async (event) => {
         if (event.target.closest("button")) return;
-        setBubble(await window.catcat.randomReply());
+        setBubble(await window.petsona.randomReply());
       });
       document.addEventListener("contextmenu", (event) => {
         event.preventDefault();
-        window.catcat.openPanel();
+        window.petsona.openPanel();
       });
       settingsBtn.addEventListener("click", (event) => {
         event.stopPropagation();
-        window.catcat.openPanel();
+        window.petsona.openPanel();
       });
 
-      window.catcat.onConfigChanged(applyConfig);
-      window.catcat.getConfig().then(applyConfig);
+      window.petsona.onConfigChanged(applyConfig);
+      window.petsona.getConfig().then(applyConfig);
       requestAnimationFrame(animate);
     </script>
   </body>
