@@ -1,4 +1,4 @@
-const { app, BrowserWindow, dialog, ipcMain, screen } = require("electron");
+const { app, BrowserWindow, dialog, globalShortcut, ipcMain, screen } = require("electron");
 const fs = require("fs");
 const path = require("path");
 const { pathToFileURL } = require("url");
@@ -7,6 +7,7 @@ const { importPetpack } = require("./src/petpack/importer");
 const DEFAULT_ASSET_ID = "default-cat-sprite";
 const HIT_PADDING = 72;
 const DEFAULT_IDLE_SECONDS = 300;
+const PASSTHROUGH_SHORTCUTS = ["CommandOrControl+Shift+P", "CommandOrControl+Alt+P"];
 
 let petWindow = null;
 let panelWindow = null;
@@ -182,6 +183,18 @@ function applyMousePassthrough() {
   });
 }
 
+function setPassthroughEnabled(passthrough, options = {}) {
+  config.interaction = {
+    ...config.interaction,
+    passthrough: Boolean(passthrough)
+  };
+  petInteractive = false;
+  applyMousePassthrough();
+  if (options.save !== false) saveConfig();
+  if (options.broadcast !== false) broadcastConfig();
+  return publicConfig();
+}
+
 function publicConfig() {
   const assets = config.assets.map(toRendererAsset);
   const activeAssetId = assetCanRender(config.assets.find((asset) => asset.id === config.activeAssetId))
@@ -272,13 +285,25 @@ function randomReply() {
   return replies[Math.floor(Math.random() * replies.length)];
 }
 
+function togglePassthroughFromShortcut() {
+  setPassthroughEnabled(!(config.interaction && config.interaction.passthrough));
+  createPanelWindow();
+}
+
 app.whenReady().then(() => {
   config = loadConfig();
   createPetWindow();
+  for (const shortcut of PASSTHROUGH_SHORTCUTS) {
+    globalShortcut.register(shortcut, togglePassthroughFromShortcut);
+  }
 
   app.on("activate", () => {
     if (!petWindow) createPetWindow();
   });
+});
+
+app.on("will-quit", () => {
+  globalShortcut.unregisterAll();
 });
 
 app.on("window-all-closed", () => {
@@ -398,11 +423,7 @@ ipcMain.handle("settings:update", (_event, patch) => {
     };
   }
   if (patch.interaction) {
-    config.interaction = {
-      ...config.interaction,
-      passthrough: Boolean(patch.interaction.passthrough)
-    };
-    applyMousePassthrough();
+    setPassthroughEnabled(patch.interaction.passthrough, { save: false, broadcast: false });
   }
   if (Array.isArray(patch.replies)) {
     config.replies = patch.replies.map((item) => String(item).trim()).filter(Boolean).slice(0, 40);
@@ -442,15 +463,7 @@ ipcMain.handle("pet:interact", (_event, buttonId) => {
 ipcMain.handle("reply:random", () => randomReply());
 
 ipcMain.handle("pet:set-passthrough", (_event, passthrough) => {
-  config.interaction = {
-    ...config.interaction,
-    passthrough: Boolean(passthrough)
-  };
-  petInteractive = false;
-  applyMousePassthrough();
-  saveConfig();
-  broadcastConfig();
-  return publicConfig();
+  return setPassthroughEnabled(passthrough);
 });
 
 ipcMain.handle("pet:set-interactive", (_event, interactive) => {
