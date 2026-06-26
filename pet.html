@@ -390,7 +390,7 @@
         name.className = "bubble__name";
         name.textContent = "77";
         const source = document.createElement("span");
-        source.textContent = `${payload.source} · ${payload.level}`;
+        source.textContent = payload.source === "77" ? `· ${payload.level}` : `${payload.source} · ${payload.level}`;
         meta.append(name, source);
         bubble.appendChild(meta);
         appendBubbleText("bubble__title", payload.title);

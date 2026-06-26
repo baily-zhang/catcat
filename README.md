@@ -75,6 +75,26 @@ DMG 依赖 macOS `hdiutil`，如果本机环境不允许创建磁盘镜像，可
 
 启动 Petsona Player 后，主进程会在本机启动通知 bridge，并把连接信息写入 `~/.petsona/bridge.json`。Terminal、iTerm 和 tmux 可以通过 CLI 让 77 显示气泡：
 
+支持环境：
+
+- 普通 Terminal.app。
+- iTerm2。
+- tmux pane。
+- zsh、bash、fish 等可运行 `node` 或 `petsona-say` 的 shell。
+- Claude Code 和 Codex，只要它们在本机 shell 中执行命令。
+- 本地脚本、git hook、测试脚本和构建脚本。
+
+通知链路统一为：
+
+```text
+terminal / tmux / Claude Code / Codex / script
+→ petsona-say 或 petsona-run
+→ 127.0.0.1:20177
+→ Electron main.js
+→ pet.html
+→ 77 气泡
+```
+
 ```bash
 npm link
 petsona-say --level info --title "需要处理" "数据库连接失败"
