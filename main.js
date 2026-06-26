@@ -3,6 +3,7 @@ const crypto = require("crypto");
 const fs = require("fs");
 const path = require("path");
 const { pathToFileURL } = require("url");
+const { importPetpack } = require("./src/petpack/importer");
 
 const DEFAULT_ASSET_ID = "default-cat-sprite";
 const ALLOWED_EXTENSIONS = new Set([".webp", ".webm", ".mp4", ".mov", ".gif"]);
@@ -23,6 +24,10 @@ function configPath() {
 
 function assetsDir() {
   return userDataPath("assets");
+}
+
+function petpacksDir() {
+  return userDataPath("petpacks");
 }
 
 function defaultConfig() {
@@ -61,6 +66,7 @@ function defaultConfig() {
 
 function ensureStorage() {
   fs.mkdirSync(assetsDir(), { recursive: true });
+  fs.mkdirSync(petpacksDir(), { recursive: true });
 }
 
 function loadConfig() {
@@ -115,17 +121,32 @@ function toRendererAsset(asset) {
     };
   }
 
+  if (!asset.path) {
+    return {
+      ...asset,
+      url: null
+    };
+  }
+
   return {
     ...asset,
     url: pathToFileURL(asset.path).href
   };
 }
 
+function assetCanRender(asset) {
+  return Boolean(asset && (asset.bundled || (asset.path && fs.existsSync(asset.path))));
+}
+
 function publicConfig() {
   const assets = config.assets.map(toRendererAsset);
-  const activeAsset = assets.find((asset) => asset.id === config.activeAssetId) || assets[0];
+  const activeAssetId = assetCanRender(config.assets.find((asset) => asset.id === config.activeAssetId))
+    ? config.activeAssetId
+    : DEFAULT_ASSET_ID;
+  const activeAsset = assets.find((asset) => asset.id === activeAssetId) || assets[0];
   return {
     ...config,
+    activeAssetId,
     hitPadding: HIT_PADDING,
     assets,
     activeAsset
@@ -289,6 +310,40 @@ ipcMain.handle("asset:upload", async () => {
   return publicConfig();
 });
 
+ipcMain.handle("petpack:import", async () => {
+  const owner = panelWindow || petWindow;
+  const result = await dialog.showOpenDialog(owner, {
+    title: "导入 Pet Pack",
+    properties: ["openFile", "multiSelections"],
+    filters: [{ name: "Pet Pack", extensions: ["petpack"] }]
+  });
+
+  if (result.canceled) return publicConfig();
+
+  const imported = [];
+  for (const filePath of result.filePaths) {
+    const asset = importPetpack(filePath, { petpacksDir: petpacksDir() });
+    const existingIndex = config.assets.findIndex((item) => item.id === asset.id);
+    if (existingIndex >= 0) {
+      config.assets[existingIndex] = asset;
+    } else {
+      config.assets.push(asset);
+    }
+    config.activeAssetId = asset.id;
+    imported.push(asset);
+  }
+
+  saveConfig();
+  broadcastConfig();
+  return {
+    ...publicConfig(),
+    importResult: {
+      imported: imported.length,
+      warnings: imported.flatMap((asset) => asset.petpack.warnings || [])
+    }
+  };
+});
+
 ipcMain.handle("asset:select", (_event, assetId) => {
   if (config.assets.some((asset) => asset.id === assetId)) {
     config.activeAssetId = assetId;
@@ -303,7 +358,9 @@ ipcMain.handle("asset:delete", (_event, assetId) => {
   if (!asset || asset.bundled) return publicConfig();
 
   config.assets = config.assets.filter((item) => item.id !== assetId);
-  if (asset.path && fs.existsSync(asset.path)) {
+  if (asset.petpack && asset.petpack.storagePath) {
+    fs.rmSync(asset.petpack.storagePath, { recursive: true, force: true });
+  } else if (asset.path && fs.existsSync(asset.path)) {
     fs.rmSync(asset.path, { force: true });
   }
   if (config.activeAssetId === assetId) {

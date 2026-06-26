@@ -44,6 +44,13 @@
         margin-bottom: 18px;
       }
 
+      .header-actions {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+        gap: 8px;
+      }
+
       h1 {
         margin: 0 0 4px;
         font-size: 24px;
@@ -195,7 +202,10 @@
           <h1>Petsona Control</h1>
           <p>素材、互动和显示大小会实时同步到桌面陪伴。</p>
         </div>
-        <button class="primary" id="uploadBtn" type="button">上传素材</button>
+        <div class="header-actions">
+          <button class="primary" id="importPackBtn" type="button">导入 Pet Pack</button>
+          <button id="uploadBtn" type="button">上传素材</button>
+        </div>
       </header>
 
       <div class="grid">
@@ -256,6 +266,7 @@
 
     <script>
       const assetList = document.getElementById("assetList");
+      const importPackBtn = document.getElementById("importPackBtn");
       const uploadBtn = document.getElementById("uploadBtn");
       const sizeInput = document.getElementById("sizeInput");
       const sizeValue = document.getElementById("sizeValue");
@@ -296,7 +307,11 @@
           const info = document.createElement("div");
           info.innerHTML = `<strong></strong><span></span>`;
           info.querySelector("strong").textContent = asset.label;
-          info.querySelector("span").textContent = asset.kind === "sprite" ? "内置 sprite" : asset.kind;
+          info.querySelector("span").textContent = asset.petpack
+            ? `Pet Pack · ${asset.petpack.id}`
+            : asset.kind === "sprite"
+              ? "内置 sprite"
+              : asset.kind;
 
           const select = document.createElement("button");
           select.type = "button";
@@ -354,10 +369,39 @@
         }, 160);
       }
 
+      function importSummary(nextConfig) {
+        const result = nextConfig.importResult;
+        if (!result) return "";
+        const warningCount = result.warnings ? result.warnings.length : 0;
+        if (warningCount > 0) return `已导入 ${result.imported} 个，${warningCount} 个警告`;
+        return `已导入 ${result.imported} 个`;
+      }
+
+      importPackBtn.addEventListener("click", async () => {
+        assetState.textContent = "导入中";
+        importPackBtn.disabled = true;
+        try {
+          const nextConfig = await window.petsona.importPetpack();
+          hydrate(nextConfig);
+          assetState.textContent = importSummary(nextConfig);
+        } catch (error) {
+          assetState.textContent = error.message || "导入失败";
+        } finally {
+          importPackBtn.disabled = false;
+        }
+      });
+
       uploadBtn.addEventListener("click", async () => {
         assetState.textContent = "上传中";
-        config = await window.petsona.uploadAssets();
-        hydrate(config);
+        uploadBtn.disabled = true;
+        try {
+          config = await window.petsona.uploadAssets();
+          hydrate(config);
+        } catch (error) {
+          assetState.textContent = error.message || "上传失败";
+        } finally {
+          uploadBtn.disabled = false;
+        }
       });
 
       sizeInput.addEventListener("input", () => {

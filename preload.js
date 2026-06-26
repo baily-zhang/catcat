@@ -6,6 +6,7 @@ const petsonaApi = {
   moveBy: (dx, dy) => ipcRenderer.invoke("pet:move-by", { dx, dy }),
   setSize: (size) => ipcRenderer.invoke("pet:set-size", size),
   uploadAssets: () => ipcRenderer.invoke("asset:upload"),
+  importPetpack: () => ipcRenderer.invoke("petpack:import"),
   selectAsset: (assetId) => ipcRenderer.invoke("asset:select", assetId),
   deleteAsset: (assetId) => ipcRenderer.invoke("asset:delete", assetId),
   updateSettings: (patch) => ipcRenderer.invoke("settings:update", patch),
