@@ -2,7 +2,7 @@ const SUPPORTED_SCHEMA_VERSION = 1;
 const SUPPORTED_RENDERERS = new Set(["webp-sequence"]);
 const SUPPORTED_ACTION_TYPES = new Set(["webp"]);
 const V1_ACTIONS = new Set(["idle", "blink", "click"]);
-const OPTIONAL_ACTIONS = new Set(["lookAround", "hover", "sleep", "message"]);
+const OPTIONAL_ACTIONS = new Set(["drag", "lookAround", "hover", "sleep", "message"]);
 
 function isPlainObject(value) {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
@@ -172,4 +172,3 @@ module.exports = {
   validateManifest,
   isSafePackagePath
 };
-

@@ -121,6 +121,7 @@ V1 supports:
 - `idle`: default loop.
 - `blink`: short non-looping idle variation.
 - `click`: short non-looping response to click.
+- `drag`: looping response while the user holds and drags the pet.
 
 Post-V1 supports:
 
@@ -161,4 +162,3 @@ Petsona Player should:
 ## Compatibility
 
 Future schema versions should be additive when possible. Breaking changes should introduce a new `schemaVersion` and clear upgrade behavior in Petsona Player.
-

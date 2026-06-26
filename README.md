@@ -54,21 +54,21 @@ DMG 依赖 macOS `hdiutil`，如果本机环境不允许创建磁盘镜像，可
 - 透明无边框桌面陪伴窗口，始终置顶并显示在所有桌面空间。
 - 左键拖动角色移动位置，位置自动保存。
 - 角色周围有透明命中区域，鼠标靠近时会变成 45 度小鱼光标并触发转头。
-- 单击角色触发随机回复，悬停显示互动按钮。
+- 单击角色触发 `click` 动作和随机回复，按住拖动时触发 `drag` 动作。
 - 右键角色或点击齿轮打开控制面板。
-- 控制面板支持导入 `.petpack`、上传、切换、删除素材。
-- 支持自定义互动按钮、随机回复、闲置自动消息和显示大小。
-- 配置与上传素材存储在 Electron `userData` 目录，修改后实时生效。
+- 控制面板支持导入 `.petpack`、切换、删除 Pet Pack。
+- 支持自定义互动按钮、随机回复、闲置触发、显示大小和鼠标穿透。
+- 配置与导入的 Pet Pack 存储在 Electron `userData` 目录，修改后实时生效。
 
 ## 文件
 
 - `package.json`: Electron 启动脚本和依赖。
-- `main.js`: 主进程、窗口管理、上传缓存和配置持久化。
+- `main.js`: 主进程、窗口管理、Pet Pack 导入和配置持久化。
 - `preload.js`: 安全 IPC 桥接。
 - `pet.html`: 透明桌面宠物窗口。
 - `panel.html`: 控制面板。
 - `sprite.webp`, `frame_front.webp`: 默认宠物素材。
 
-## 素材建议
+## Pet Pack 建议
 
-上传视频或 GIF 时，最好使用透明背景或稳定纯色背景预处理后的素材。用于方向 sprite 的素材应首尾 loop、角速度均匀，并把正脸中心帧单独保留。后续 Petsona Studio 生成的 `.petpack` 会作为标准素材包导入 Petsona Player。
+Petsona Player 现在以 `.petpack` 作为正式导入入口。Pet Pack 至少需要 `idle` 动作；提供 `click` 和 `drag` 动作时，播放器会在点击和按住拖拽时自动切换，动作缺失时回退到 `idle`。

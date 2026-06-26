@@ -53,6 +53,7 @@ const availableFiles = [
   "assets/idle.webp",
   "assets/blink.webp",
   "assets/click.webp",
+  "assets/drag.webp",
   "previews/thumbnail.webp"
 ];
 
@@ -160,3 +161,25 @@ test("warns about unknown actions without rejecting the pack", () => {
   assert.ok(result.warnings.some((warning) => warning.code === "action.name.unknown"));
 });
 
+test("accepts drag as a recognized v1 interaction action", () => {
+  const result = validateManifest(
+    validManifest({
+      actions: {
+        idle: {
+          type: "webp",
+          src: "assets/idle.webp"
+        },
+        drag: {
+          type: "webp",
+          src: "assets/drag.webp",
+          loop: true,
+          trigger: "drag"
+        }
+      }
+    }),
+    { availableFiles: ["assets/idle.webp", "assets/drag.webp", "previews/thumbnail.webp"] }
+  );
+
+  assert.equal(result.valid, true);
+  assert.equal(result.warnings.some((warning) => warning.code === "action.name.unknown"), false);
+});

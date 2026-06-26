@@ -1,18 +1,17 @@
 const { app, BrowserWindow, dialog, ipcMain, screen } = require("electron");
-const crypto = require("crypto");
 const fs = require("fs");
 const path = require("path");
 const { pathToFileURL } = require("url");
 const { importPetpack } = require("./src/petpack/importer");
 
 const DEFAULT_ASSET_ID = "default-cat-sprite";
-const ALLOWED_EXTENSIONS = new Set([".webp", ".webm", ".mp4", ".mov", ".gif"]);
-const VIDEO_EXTENSIONS = new Set([".webm", ".mp4", ".mov"]);
 const HIT_PADDING = 72;
+const DEFAULT_IDLE_SECONDS = 300;
 
 let petWindow = null;
 let panelWindow = null;
 let config = null;
+let petInteractive = false;
 
 function userDataPath(...parts) {
   return path.join(app.getPath("userData"), ...parts);
@@ -20,10 +19,6 @@ function userDataPath(...parts) {
 
 function configPath() {
   return userDataPath("config.json");
-}
-
-function assetsDir() {
-  return userDataPath("assets");
 }
 
 function petpacksDir() {
@@ -48,7 +43,25 @@ function defaultConfig() {
         kind: "sprite",
         bundled: true,
         sprite: "sprite.webp",
-        front: "frame_front.webp"
+        front: "frame_front.webp",
+        actions: {
+          idle: {
+            name: "idle",
+            type: "sprite",
+            src: "sprite.webp"
+          },
+          click: {
+            name: "click",
+            type: "sprite-state",
+            src: "sprite.webp",
+            durationMs: 900
+          },
+          drag: {
+            name: "drag",
+            type: "sprite-state",
+            src: "sprite.webp"
+          }
+        }
       }
     ],
     buttons: [
@@ -59,14 +72,24 @@ function defaultConfig() {
     replies: ["今天也在桌面巡逻。", "鱼在哪里？", "我看到你的鼠标了。", "先不要切走。"],
     idle: {
       enabled: true,
-      intervalSeconds: 45
+      intervalSeconds: DEFAULT_IDLE_SECONDS
+    },
+    interaction: {
+      passthrough: false
     }
   };
 }
 
 function ensureStorage() {
-  fs.mkdirSync(assetsDir(), { recursive: true });
   fs.mkdirSync(petpacksDir(), { recursive: true });
+}
+
+function normalizeAssets(assets, fallbackAsset) {
+  const kept = Array.isArray(assets)
+    ? assets.filter((asset) => asset && (asset.bundled || asset.petpack))
+    : [];
+  const withoutDefault = kept.filter((asset) => asset.id !== DEFAULT_ASSET_ID);
+  return [fallbackAsset, ...withoutDefault];
 }
 
 function loadConfig() {
@@ -84,14 +107,12 @@ function loadConfig() {
       ...parsed,
       window: { ...fallback.window, ...(parsed.window || {}) },
       idle: { ...fallback.idle, ...(parsed.idle || {}) },
-      assets: Array.isArray(parsed.assets) ? parsed.assets : fallback.assets,
+      interaction: { ...fallback.interaction, ...(parsed.interaction || {}) },
+      assets: normalizeAssets(parsed.assets, fallback.assets[0]),
       buttons: Array.isArray(parsed.buttons) ? parsed.buttons : fallback.buttons,
       replies: Array.isArray(parsed.replies) ? parsed.replies : fallback.replies
     };
 
-    if (!merged.assets.some((asset) => asset.id === DEFAULT_ASSET_ID)) {
-      merged.assets.unshift(fallback.assets[0]);
-    }
     if (!merged.assets.some((asset) => asset.id === merged.activeAssetId)) {
       merged.activeAssetId = DEFAULT_ASSET_ID;
     }
@@ -107,15 +128,28 @@ function saveConfig(nextConfig = config) {
   fs.writeFileSync(configPath(), JSON.stringify(nextConfig, null, 2));
 }
 
-function assetKindFor(filePath) {
-  const ext = path.extname(filePath).toLowerCase();
-  return VIDEO_EXTENSIONS.has(ext) ? "video" : "image";
+function rendererAction(action, asset) {
+  if (!action) return null;
+  const srcPath = action.path || (asset.bundled && action.src ? path.join(__dirname, action.src) : null);
+  return {
+    ...action,
+    url: srcPath ? pathToFileURL(srcPath).href : null
+  };
+}
+
+function rendererActions(asset) {
+  const actions = asset.actions || (asset.petpack && asset.petpack.actions) || {};
+  return Object.fromEntries(
+    Object.entries(actions).map(([name, action]) => [name, rendererAction(action, asset)])
+  );
 }
 
 function toRendererAsset(asset) {
+  const actions = rendererActions(asset);
   if (asset.bundled) {
     return {
       ...asset,
+      actions,
       url: pathToFileURL(path.join(__dirname, asset.sprite || asset.file || "")).href,
       frontUrl: pathToFileURL(path.join(__dirname, asset.front || asset.sprite || "")).href
     };
@@ -124,18 +158,28 @@ function toRendererAsset(asset) {
   if (!asset.path) {
     return {
       ...asset,
+      actions,
       url: null
     };
   }
 
   return {
     ...asset,
+    actions,
     url: pathToFileURL(asset.path).href
   };
 }
 
 function assetCanRender(asset) {
   return Boolean(asset && (asset.bundled || (asset.path && fs.existsSync(asset.path))));
+}
+
+function applyMousePassthrough() {
+  if (!petWindow || petWindow.isDestroyed()) return;
+  const passthrough = Boolean(config.interaction && config.interaction.passthrough);
+  petWindow.setIgnoreMouseEvents(passthrough && !petInteractive, {
+    forward: true
+  });
 }
 
 function publicConfig() {
@@ -187,7 +231,10 @@ function createPetWindow() {
   petWindow.setAlwaysOnTop(true, "floating");
   petWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
   petWindow.loadFile(path.join(__dirname, "pet.html"));
-  petWindow.once("ready-to-show", () => petWindow.show());
+  petWindow.once("ready-to-show", () => {
+    applyMousePassthrough();
+    petWindow.show();
+  });
   petWindow.on("closed", () => {
     petWindow = null;
   });
@@ -277,39 +324,6 @@ ipcMain.handle("pet:set-size", (_event, sizeValue) => {
   return true;
 });
 
-ipcMain.handle("asset:upload", async () => {
-  const owner = panelWindow || petWindow;
-  const result = await dialog.showOpenDialog(owner, {
-    title: "选择宠物素材",
-    properties: ["openFile", "multiSelections"],
-    filters: [
-      { name: "Pet media", extensions: ["webp", "webm", "mp4", "mov", "gif"] }
-    ]
-  });
-
-  if (result.canceled) return publicConfig();
-
-  for (const filePath of result.filePaths) {
-    const ext = path.extname(filePath).toLowerCase();
-    if (!ALLOWED_EXTENSIONS.has(ext)) continue;
-
-    const id = crypto.randomUUID();
-    const dest = path.join(assetsDir(), `${id}${ext}`);
-    fs.copyFileSync(filePath, dest);
-    config.assets.push({
-      id,
-      label: path.basename(filePath),
-      kind: assetKindFor(filePath),
-      path: dest
-    });
-    config.activeAssetId = id;
-  }
-
-  saveConfig();
-  broadcastConfig();
-  return publicConfig();
-});
-
 ipcMain.handle("petpack:import", async () => {
   const owner = panelWindow || petWindow;
   const result = await dialog.showOpenDialog(owner, {
@@ -380,8 +394,15 @@ ipcMain.handle("settings:update", (_event, patch) => {
     config.idle = {
       ...config.idle,
       enabled: Boolean(patch.idle.enabled),
-      intervalSeconds: Math.max(10, Math.min(600, Math.round(Number(patch.idle.intervalSeconds) || 45)))
+      intervalSeconds: Math.max(10, Math.min(1800, Math.round(Number(patch.idle.intervalSeconds) || DEFAULT_IDLE_SECONDS)))
     };
+  }
+  if (patch.interaction) {
+    config.interaction = {
+      ...config.interaction,
+      passthrough: Boolean(patch.interaction.passthrough)
+    };
+    applyMousePassthrough();
   }
   if (Array.isArray(patch.replies)) {
     config.replies = patch.replies.map((item) => String(item).trim()).filter(Boolean).slice(0, 40);
@@ -419,3 +440,21 @@ ipcMain.handle("pet:interact", (_event, buttonId) => {
 });
 
 ipcMain.handle("reply:random", () => randomReply());
+
+ipcMain.handle("pet:set-passthrough", (_event, passthrough) => {
+  config.interaction = {
+    ...config.interaction,
+    passthrough: Boolean(passthrough)
+  };
+  petInteractive = false;
+  applyMousePassthrough();
+  saveConfig();
+  broadcastConfig();
+  return publicConfig();
+});
+
+ipcMain.handle("pet:set-interactive", (_event, interactive) => {
+  petInteractive = Boolean(interactive);
+  applyMousePassthrough();
+  return true;
+});

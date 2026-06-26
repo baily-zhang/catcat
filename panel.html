@@ -204,14 +204,13 @@
         </div>
         <div class="header-actions">
           <button class="primary" id="importPackBtn" type="button">导入 Pet Pack</button>
-          <button id="uploadBtn" type="button">上传素材</button>
         </div>
       </header>
 
       <div class="grid">
         <section>
           <div class="section-head">
-            <h2>素材</h2>
+            <h2>Pet Pack</h2>
             <span class="save-state" id="assetState"></span>
           </div>
           <div class="body">
@@ -231,12 +230,18 @@
             </label>
             <div class="row">
               <label style="margin: 0;">
-                闲置消息
+                闲置触发
                 <input id="idleEnabled" type="checkbox" />
               </label>
               <label style="margin: 0;">
                 间隔秒数
-                <input id="idleInterval" type="number" min="10" max="600" step="5" />
+                <input id="idleInterval" type="number" min="10" max="1800" step="5" />
+              </label>
+            </div>
+            <div class="row">
+              <label style="margin: 14px 0 0;">
+                鼠标穿透
+                <input id="passthroughEnabled" type="checkbox" />
               </label>
             </div>
           </div>
@@ -267,11 +272,11 @@
     <script>
       const assetList = document.getElementById("assetList");
       const importPackBtn = document.getElementById("importPackBtn");
-      const uploadBtn = document.getElementById("uploadBtn");
       const sizeInput = document.getElementById("sizeInput");
       const sizeValue = document.getElementById("sizeValue");
       const idleEnabled = document.getElementById("idleEnabled");
       const idleInterval = document.getElementById("idleInterval");
+      const passthroughEnabled = document.getElementById("passthroughEnabled");
       const buttonsInput = document.getElementById("buttonsInput");
       const repliesInput = document.getElementById("repliesInput");
       const assetState = document.getElementById("assetState");
@@ -311,7 +316,7 @@
             ? `Pet Pack · ${asset.petpack.id}`
             : asset.kind === "sprite"
               ? "内置 sprite"
-              : asset.kind;
+              : "Pet Pack";
 
           const select = document.createElement("button");
           select.type = "button";
@@ -345,6 +350,7 @@
         sizeValue.textContent = `${config.window.size}px`;
         idleEnabled.checked = Boolean(config.idle.enabled);
         idleInterval.value = config.idle.intervalSeconds;
+        passthroughEnabled.checked = Boolean(config.interaction && config.interaction.passthrough);
         buttonsInput.value = buttonLines(config.buttons);
         repliesInput.value = config.replies.join("\n");
         assetState.textContent = "";
@@ -360,6 +366,9 @@
             idle: {
               enabled: idleEnabled.checked,
               intervalSeconds: Number(idleInterval.value)
+            },
+            interaction: {
+              passthrough: passthroughEnabled.checked
             },
             buttons: parseButtonLines(buttonsInput.value),
             replies: repliesInput.value.split("\n").map((line) => line.trim()).filter(Boolean)
@@ -391,19 +400,6 @@
         }
       });
 
-      uploadBtn.addEventListener("click", async () => {
-        assetState.textContent = "上传中";
-        uploadBtn.disabled = true;
-        try {
-          config = await window.petsona.uploadAssets();
-          hydrate(config);
-        } catch (error) {
-          assetState.textContent = error.message || "上传失败";
-        } finally {
-          uploadBtn.disabled = false;
-        }
-      });
-
       sizeInput.addEventListener("input", () => {
         sizeValue.textContent = `${sizeInput.value}px`;
         window.petsona.setSize(Number(sizeInput.value));
@@ -411,6 +407,10 @@
       });
       idleEnabled.addEventListener("change", scheduleSave);
       idleInterval.addEventListener("input", scheduleSave);
+      passthroughEnabled.addEventListener("change", async () => {
+        config = await window.petsona.setPassthrough(passthroughEnabled.checked);
+        hydrate(config);
+      });
       buttonsInput.addEventListener("input", scheduleSave);
       repliesInput.addEventListener("input", scheduleSave);
 

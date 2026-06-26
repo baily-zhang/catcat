@@ -58,6 +58,17 @@
         animation: idle-breathe 3.8s ease-in-out infinite;
       }
 
+      .pet.is-clicking,
+      .media.is-clicking {
+        animation: action-click 520ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+      }
+
+      .pet.is-dragging,
+      .media.is-dragging {
+        animation: action-drag 860ms ease-in-out infinite;
+        filter: drop-shadow(0 22px 24px rgba(34, 29, 24, 0.22));
+      }
+
       .media {
         width: 100%;
         aspect-ratio: 1;
@@ -176,6 +187,31 @@
           transform: translateY(-2px) scale(1.006);
         }
       }
+
+      @keyframes action-click {
+        0% {
+          transform: translateY(0) scale(1);
+        }
+        38% {
+          transform: translateY(-8px) scale(1.045, 0.965);
+        }
+        70% {
+          transform: translateY(2px) scale(0.985, 1.02);
+        }
+        100% {
+          transform: translateY(0) scale(1);
+        }
+      }
+
+      @keyframes action-drag {
+        0%,
+        100% {
+          transform: translateY(-1px) rotate(-1.4deg) scale(1.01);
+        }
+        50% {
+          transform: translateY(2px) rotate(1.4deg) scale(0.995);
+        }
+      }
     </style>
   </head>
   <body>
@@ -231,7 +267,11 @@
       let displayAngle = null;
       let bubbleTimer = null;
       let idleTimer = null;
+      let actionTimer = null;
+      let activeActionName = "idle";
       let dragging = null;
+      let suppressNextClick = false;
+      let interactiveOverride = false;
 
       function mod(value, base) {
         return ((value % base) + base) % base;
@@ -279,6 +319,101 @@
         bubbleTimer = setTimeout(() => bubble.classList.remove("is-visible"), 3200);
       }
 
+      function actionFor(name) {
+        const asset = config && config.activeAsset;
+        if (!asset) return null;
+        const actions = asset.actions || {};
+        return actions[name] || (name !== "idle" ? actions.idle : null);
+      }
+
+      function actionKind(action) {
+        if (!action) return "none";
+        if (action.type === "sprite" || action.type === "sprite-state") return "sprite";
+        if (action.type === "webm" || action.type === "mp4" || action.type === "mov") return "video";
+        return "image";
+      }
+
+      function actionDuration(action, fallback = 900) {
+        if (!action || action.name === "idle" || action.name === "drag") return null;
+        const duration = Number(action.durationMs);
+        return Number.isFinite(duration) && duration > 0 ? Math.round(duration) : fallback;
+      }
+
+      function clearVisualState() {
+        for (const node of [spritePet, imagePet, videoPet]) {
+          node.classList.remove("is-clicking", "is-dragging");
+        }
+      }
+
+      function setVisualState(actionName) {
+        clearVisualState();
+        const className = actionName === "click" ? "is-clicking" : actionName === "drag" ? "is-dragging" : "";
+        if (!className) return;
+        for (const node of [spritePet, imagePet, videoPet]) {
+          node.classList.add(className);
+        }
+      }
+
+      function hideRenderers() {
+        spritePet.classList.add("hidden");
+        imagePet.classList.add("hidden");
+        videoPet.classList.add("hidden");
+        videoPet.pause();
+      }
+
+      function replayImage(url, actionName) {
+        if (imagePet.src === url && actionName !== "idle") {
+          imagePet.removeAttribute("src");
+          requestAnimationFrame(() => {
+            imagePet.src = url;
+          });
+          return;
+        }
+        imagePet.src = url;
+      }
+
+      function renderAction(actionName) {
+        if (!config) return;
+        const action = actionFor(actionName) || actionFor("idle");
+        if (!action) return;
+
+        clearTimeout(actionTimer);
+        activeActionName = action.name || actionName;
+        const kind = actionKind(action);
+        hideRenderers();
+        setVisualState(activeActionName);
+
+        if (kind === "sprite") {
+          spritePet.style.backgroundImage = `url("${action.url || config.activeAsset.url}")`;
+          if (activeActionName !== "idle") setFrame(FRONT_FRAME);
+          spritePet.classList.remove("hidden");
+        } else if (kind === "video") {
+          videoPet.loop = activeActionName === "idle" || activeActionName === "drag";
+          videoPet.src = action.url || config.activeAsset.url;
+          videoPet.classList.remove("hidden");
+          videoPet.play().catch(() => {});
+        } else {
+          replayImage(action.url || config.activeAsset.url, activeActionName);
+          imagePet.classList.remove("hidden");
+        }
+
+        const duration = actionDuration(action);
+        if (duration) {
+          actionTimer = setTimeout(() => renderAction("idle"), duration);
+        }
+      }
+
+      function markInteraction() {
+        resetIdleTimer();
+      }
+
+      function setTemporaryInteractive(nextInteractive) {
+        if (!config || !config.interaction || !config.interaction.passthrough) return;
+        if (interactiveOverride === nextInteractive) return;
+        interactiveOverride = nextInteractive;
+        window.petsona.setInteractive(nextInteractive);
+      }
+
       function renderButtons() {
         dock.querySelectorAll(".action").forEach((node) => node.remove());
         const buttons = (config && config.buttons) || [];
@@ -289,46 +424,29 @@
           node.textContent = button.label;
           node.addEventListener("click", async (event) => {
             event.stopPropagation();
+            markInteraction();
+            renderAction("click");
             setBubble(await window.petsona.interact(button.id));
           });
           dock.appendChild(node);
         }
       }
 
-      function renderAsset() {
-        const asset = config.activeAsset;
-        spritePet.classList.add("hidden");
-        imagePet.classList.add("hidden");
-        videoPet.classList.add("hidden");
-        videoPet.pause();
-
-        if (asset.kind === "sprite") {
-          spritePet.style.backgroundImage = `url("${asset.url}")`;
-          setFrame(FRONT_FRAME);
-          spritePet.classList.remove("hidden");
-        } else if (asset.kind === "video") {
-          videoPet.src = asset.url;
-          videoPet.classList.remove("hidden");
-          videoPet.play().catch(() => {});
-        } else {
-          imagePet.src = asset.url;
-          imagePet.classList.remove("hidden");
-        }
-      }
-
       function resetIdleTimer() {
-        clearInterval(idleTimer);
+        clearTimeout(idleTimer);
         if (!config || !config.idle.enabled) return;
-        const ms = Math.max(10, Number(config.idle.intervalSeconds || 45)) * 1000;
-        idleTimer = setInterval(async () => {
+        const ms = Math.max(10, Number(config.idle.intervalSeconds || 300)) * 1000;
+        idleTimer = setTimeout(async () => {
+          renderAction("idle");
           setBubble(await window.petsona.randomReply());
+          resetIdleTimer();
         }, ms);
       }
 
       function applyConfig(nextConfig) {
         config = nextConfig;
         document.documentElement.style.setProperty("--hit-padding", `${config.hitPadding || 72}px`);
-        renderAsset();
+        renderAction("idle");
         renderButtons();
         resetIdleTimer();
       }
@@ -340,7 +458,7 @@
       }
 
       function updateAngleFromPointer(event) {
-        if (!config || config.activeAsset.kind !== "sprite") return;
+        if (!config || config.activeAsset.kind !== "sprite" || activeActionName !== "idle") return;
         const rect = spritePet.getBoundingClientRect();
         const head = {
           x: rect.left + rect.width * HEAD_ANCHOR.x,
@@ -370,17 +488,25 @@
 
       function startDrag(event) {
         if (event.button !== 0 || event.target.closest("button")) return;
-        dragging = { x: event.screenX, y: event.screenY };
+        markInteraction();
+        setTemporaryInteractive(true);
+        dragging = { x: event.screenX, y: event.screenY, moved: false };
+        renderAction("drag");
         document.body.setPointerCapture(event.pointerId);
       }
 
       async function moveDrag(event) {
         updateFishCursor(event);
+        if (event.altKey) setTemporaryInteractive(true);
         updateAngleFromPointer(event);
         if (!dragging) return;
         const dx = event.screenX - dragging.x;
         const dy = event.screenY - dragging.y;
-        dragging = { x: event.screenX, y: event.screenY };
+        dragging = {
+          x: event.screenX,
+          y: event.screenY,
+          moved: dragging.moved || Math.abs(dx) > 1 || Math.abs(dy) > 1
+        };
         await window.petsona.moveBy(dx, dy);
       }
 
@@ -388,24 +514,39 @@
       document.addEventListener("pointermove", moveDrag);
       document.addEventListener("pointerenter", updateFishCursor);
       document.addEventListener("pointerup", () => {
+        if (dragging) {
+          suppressNextClick = dragging.moved;
+          renderAction("idle");
+        }
         dragging = null;
+        if (!document.body.matches(":hover")) setTemporaryInteractive(false);
       });
       document.addEventListener("pointerleave", () => {
         document.body.classList.remove("is-hovering");
         targetAngle = null;
         displayAngle = null;
-        setFrame(FRONT_FRAME);
+        if (activeActionName === "idle") setFrame(FRONT_FRAME);
+        if (!dragging) setTemporaryInteractive(false);
       });
       document.addEventListener("click", async (event) => {
         if (event.target.closest("button")) return;
+        if (suppressNextClick) {
+          suppressNextClick = false;
+          return;
+        }
+        markInteraction();
+        renderAction("click");
         setBubble(await window.petsona.randomReply());
       });
       document.addEventListener("contextmenu", (event) => {
         event.preventDefault();
+        markInteraction();
+        setTemporaryInteractive(true);
         window.petsona.openPanel();
       });
       settingsBtn.addEventListener("click", (event) => {
         event.stopPropagation();
+        markInteraction();
         window.petsona.openPanel();
       });
 

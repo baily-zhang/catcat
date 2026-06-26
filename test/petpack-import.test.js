@@ -91,6 +91,20 @@ function validManifest(overrides = {}) {
         src: "assets/idle.webp",
         fps: 12,
         loop: true
+      },
+      click: {
+        type: "webp",
+        src: "assets/click.webp",
+        fps: 12,
+        loop: false,
+        trigger: "click"
+      },
+      drag: {
+        type: "webp",
+        src: "assets/drag.webp",
+        fps: 12,
+        loop: true,
+        trigger: "drag"
       }
     },
     preview: {
@@ -131,6 +145,8 @@ test("imports a valid petpack into app-managed storage", (t) => {
   createPetpack(sourcePath, {
     "manifest.json": JSON.stringify(validManifest()),
     "assets/idle.webp": Buffer.from("idle image"),
+    "assets/click.webp": Buffer.from("click image"),
+    "assets/drag.webp": Buffer.from("drag image"),
     "previews/thumb.webp": Buffer.from("thumbnail")
   });
 
@@ -138,12 +154,14 @@ test("imports a valid petpack into app-managed storage", (t) => {
 
   assert.match(asset.id, /^petpack-petsona\.test\.import-[a-f0-9]{12}$/);
   assert.equal(asset.label, "Import Test Pet");
-  assert.equal(asset.kind, "image");
+  assert.equal(asset.kind, "petpack");
   assert.equal(fs.readFileSync(asset.path, "utf8"), "idle image");
   assert.equal(fs.existsSync(asset.petpack.sourcePath), true);
   assert.deepEqual(fs.readFileSync(asset.petpack.sourcePath), fs.readFileSync(sourcePath));
   assert.equal(fs.existsSync(asset.petpack.manifestPath), true);
   assert.equal(fs.existsSync(asset.petpack.actions.idle.path), true);
+  assert.equal(fs.readFileSync(asset.actions.click.path, "utf8"), "click image");
+  assert.equal(fs.readFileSync(asset.actions.drag.path, "utf8"), "drag image");
   assert.deepEqual(asset.petpack.warnings, []);
 });
 
@@ -157,7 +175,9 @@ test("imports valid petpacks that only have optional metadata warnings", (t) => 
         entitlements: undefined
       })
     ),
-    "assets/idle.webp": Buffer.from("idle image")
+    "assets/idle.webp": Buffer.from("idle image"),
+    "assets/click.webp": Buffer.from("click image"),
+    "assets/drag.webp": Buffer.from("drag image")
   });
 
   const asset = importPetpack(sourcePath, { petpacksDir: path.join(dir, "petpacks") });

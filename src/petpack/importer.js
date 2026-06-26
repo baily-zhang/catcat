@@ -117,6 +117,7 @@ function importPetpack(sourcePath, options = {}) {
     for (const [name, action] of Object.entries(manifest.actions || {})) {
       actions[name] = {
         ...action,
+        name,
         path: extractedAssets[action.src] || null
       };
     }
@@ -124,8 +125,9 @@ function importPetpack(sourcePath, options = {}) {
     return {
       id,
       label: manifest.name,
-      kind: idle.type === "webp" ? "image" : idle.type,
+      kind: "petpack",
       path: idlePath,
+      actions,
       petpack: {
         id: manifest.id,
         name: manifest.name,
