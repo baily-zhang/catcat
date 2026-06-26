@@ -58,7 +58,7 @@ DMG 依赖 macOS `hdiutil`，如果本机环境不允许创建磁盘镜像，可
 - 右键角色或点击齿轮打开控制面板。
 - 控制面板支持导入 `.petpack`、切换、删除 Pet Pack。
 - 支持自定义互动按钮、随机回复、闲置触发、显示大小和鼠标穿透。
-- 鼠标穿透可用 `Command/Ctrl + Shift + P` 或 `Command/Ctrl + Alt + P` 全局切换并打开控制面板。
+- 鼠标穿透开启后，按住 `Command/Ctrl` 可临时点击和拖拽宠物。
 - 配置与导入的 Pet Pack 存储在 Electron `userData` 目录，修改后实时生效。
 
 ## 文件

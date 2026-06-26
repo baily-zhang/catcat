@@ -414,6 +414,15 @@
         window.petsona.setInteractive(nextInteractive);
       }
 
+      function hasAccessModifier(event) {
+        return Boolean(event && (event.metaKey || event.ctrlKey));
+      }
+
+      function syncModifierInteractive(event) {
+        if (dragging) return;
+        setTemporaryInteractive(hasAccessModifier(event));
+      }
+
       function renderButtons() {
         dock.querySelectorAll(".action").forEach((node) => node.remove());
         const buttons = (config && config.buttons) || [];
@@ -497,7 +506,7 @@
 
       async function moveDrag(event) {
         updateFishCursor(event);
-        if (event.altKey) setTemporaryInteractive(true);
+        syncModifierInteractive(event);
         updateAngleFromPointer(event);
         if (!dragging) return;
         const dx = event.screenX - dragging.x;
@@ -512,14 +521,17 @@
 
       document.addEventListener("pointerdown", startDrag);
       document.addEventListener("pointermove", moveDrag);
-      document.addEventListener("pointerenter", updateFishCursor);
-      document.addEventListener("pointerup", () => {
+      document.addEventListener("pointerenter", (event) => {
+        updateFishCursor(event);
+        syncModifierInteractive(event);
+      });
+      document.addEventListener("pointerup", (event) => {
         if (dragging) {
           suppressNextClick = dragging.moved;
           renderAction("idle");
         }
         dragging = null;
-        if (!document.body.matches(":hover")) setTemporaryInteractive(false);
+        if (!hasAccessModifier(event) || !document.body.matches(":hover")) setTemporaryInteractive(false);
       });
       document.addEventListener("pointerleave", () => {
         document.body.classList.remove("is-hovering");
@@ -537,6 +549,7 @@
         markInteraction();
         renderAction("click");
         setBubble(await window.petsona.randomReply());
+        if (!hasAccessModifier(event)) setTemporaryInteractive(false);
       });
       document.addEventListener("contextmenu", (event) => {
         event.preventDefault();
@@ -548,6 +561,11 @@
         event.stopPropagation();
         markInteraction();
         window.petsona.openPanel();
+      });
+      document.addEventListener("keyup", (event) => {
+        if ((event.key === "Meta" || event.key === "Control") && !dragging) {
+          setTemporaryInteractive(false);
+        }
       });
 
       window.petsona.onConfigChanged(applyConfig);

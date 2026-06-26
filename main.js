@@ -1,4 +1,4 @@
-const { app, BrowserWindow, dialog, globalShortcut, ipcMain, screen } = require("electron");
+const { app, BrowserWindow, dialog, ipcMain, screen } = require("electron");
 const fs = require("fs");
 const path = require("path");
 const { pathToFileURL } = require("url");
@@ -7,7 +7,6 @@ const { importPetpack } = require("./src/petpack/importer");
 const DEFAULT_ASSET_ID = "default-cat-sprite";
 const HIT_PADDING = 72;
 const DEFAULT_IDLE_SECONDS = 300;
-const PASSTHROUGH_SHORTCUTS = ["CommandOrControl+Shift+P", "CommandOrControl+Alt+P"];
 
 let petWindow = null;
 let panelWindow = null;
@@ -285,25 +284,13 @@ function randomReply() {
   return replies[Math.floor(Math.random() * replies.length)];
 }
 
-function togglePassthroughFromShortcut() {
-  setPassthroughEnabled(!(config.interaction && config.interaction.passthrough));
-  createPanelWindow();
-}
-
 app.whenReady().then(() => {
   config = loadConfig();
   createPetWindow();
-  for (const shortcut of PASSTHROUGH_SHORTCUTS) {
-    globalShortcut.register(shortcut, togglePassthroughFromShortcut);
-  }
 
   app.on("activate", () => {
     if (!petWindow) createPetWindow();
   });
-});
-
-app.on("will-quit", () => {
-  globalShortcut.unregisterAll();
 });
 
 app.on("window-all-closed", () => {
