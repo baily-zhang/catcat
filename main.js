@@ -2,6 +2,7 @@ const { app, BrowserWindow, dialog, ipcMain, screen } = require("electron");
 const fs = require("fs");
 const path = require("path");
 const { pathToFileURL } = require("url");
+const { createNotificationBridge } = require("./src/notification/bridge");
 const { importPetpack } = require("./src/petpack/importer");
 
 const DEFAULT_ASSET_ID = "default-cat-sprite";
@@ -12,6 +13,8 @@ let petWindow = null;
 let panelWindow = null;
 let config = null;
 let petInteractive = false;
+let notificationBridge = null;
+const pendingPetBubbles = [];
 
 function userDataPath(...parts) {
   return path.join(app.getPath("userData"), ...parts);
@@ -218,6 +221,21 @@ function broadcastConfig() {
   }
 }
 
+function flushPendingPetBubbles() {
+  if (!petWindow || petWindow.isDestroyed() || petWindow.webContents.isLoading()) return;
+  while (pendingPetBubbles.length > 0) {
+    petWindow.webContents.send("pet:bubble", pendingPetBubbles.shift());
+  }
+}
+
+function sendPetBubble(notification) {
+  if (!petWindow || petWindow.isDestroyed() || petWindow.webContents.isLoading()) {
+    pendingPetBubbles.push(notification);
+    return;
+  }
+  petWindow.webContents.send("pet:bubble", notification);
+}
+
 function createPetWindow() {
   const size = Math.max(180, Math.min(560, Number(config.window.size) || 320));
   const outerSize = size + HIT_PADDING * 2;
@@ -243,6 +261,7 @@ function createPetWindow() {
   petWindow.setAlwaysOnTop(true, "floating");
   petWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
   petWindow.loadFile(path.join(__dirname, "pet.html"));
+  petWindow.webContents.on("did-finish-load", flushPendingPetBubbles);
   petWindow.once("ready-to-show", () => {
     applyMousePassthrough();
     petWindow.show();
@@ -284,13 +303,30 @@ function randomReply() {
   return replies[Math.floor(Math.random() * replies.length)];
 }
 
+async function startNotificationBridge() {
+  notificationBridge = await createNotificationBridge({
+    onMessage: sendPetBubble
+  }).start();
+  console.log(`Petsona notification bridge listening on 127.0.0.1:${notificationBridge.port}`);
+}
+
 app.whenReady().then(() => {
   config = loadConfig();
   createPetWindow();
+  startNotificationBridge().catch((error) => {
+    console.error("Failed to start Petsona notification bridge:", error);
+  });
 
   app.on("activate", () => {
     if (!petWindow) createPetWindow();
   });
+});
+
+app.on("will-quit", () => {
+  if (notificationBridge) {
+    notificationBridge.close();
+    notificationBridge = null;
+  }
 });
 
 app.on("window-all-closed", () => {

@@ -1,6 +1,6 @@
 # Petsona Player
 
-Petsona Player 是基于 Electron + HTML/CSS/JS 的 macOS 透明悬浮桌面陪伴播放器。默认使用当前目录里的 `sprite.webp` 和 `frame_front.webp`，也可以在控制面板上传 `webp`、`webm`、`mp4`、`mov`、`gif` 素材。
+Petsona Player 是基于 Electron + HTML/CSS/JS 的 macOS 透明悬浮桌面陪伴播放器。默认使用当前目录里的 `sprite.webp` 和 `frame_front.webp`，也可以在控制面板导入 `.petpack`。
 
 ## 运行
 
@@ -65,10 +65,43 @@ DMG 依赖 macOS `hdiutil`，如果本机环境不允许创建磁盘镜像，可
 
 - `package.json`: Electron 启动脚本和依赖。
 - `main.js`: 主进程、窗口管理、Pet Pack 导入和配置持久化。
+- `bin/petsona-say.js`, `bin/petsona-run.js`: terminal/tmux 通知 77 的 CLI。
 - `preload.js`: 安全 IPC 桥接。
 - `pet.html`: 透明桌面宠物窗口。
 - `panel.html`: 控制面板。
 - `sprite.webp`, `frame_front.webp`: 默认宠物素材。
+
+## Terminal 通知
+
+启动 Petsona Player 后，主进程会在本机启动通知 bridge，并把连接信息写入 `~/.petsona/bridge.json`。Terminal、iTerm 和 tmux 可以通过 CLI 让 77 显示气泡：
+
+```bash
+npm link
+petsona-say --level info --title "需要处理" "数据库连接失败"
+petsona-say --level success "测试完成"
+petsona-run npm test
+```
+
+不想 `npm link` 时，也可以直接运行：
+
+```bash
+node bin/petsona-say.js --level warning "看一下当前 pane"
+node bin/petsona-run.js -- npm test
+```
+
+Shell helper:
+
+```bash
+source scripts/petsona-shell.sh
+petsona_say --level error "构建失败"
+petsona_run npm test
+```
+
+tmux helper:
+
+```tmux
+source-file /path/to/catcat/scripts/petsona-tmux.conf
+```
 
 ## Pet Pack 建议
 

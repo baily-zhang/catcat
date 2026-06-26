@@ -86,7 +86,8 @@
         left: 50%;
         top: 7%;
         max-width: min(86%, 280px);
-        padding: 9px 12px;
+        min-width: 156px;
+        padding: 10px 12px;
         border: 1px solid var(--line);
         border-radius: 10px;
         background: var(--panel);
@@ -96,6 +97,47 @@
         pointer-events: none;
         transform: translate(-50%, -8px) scale(0.98);
         transition: opacity 160ms ease, transform 160ms ease;
+      }
+
+      .bubble[data-level="success"] {
+        border-color: rgba(47, 123, 116, 0.38);
+        background: rgba(239, 249, 238, 0.94);
+      }
+
+      .bubble[data-level="warning"] {
+        border-color: rgba(177, 120, 44, 0.42);
+        background: rgba(255, 246, 221, 0.95);
+      }
+
+      .bubble[data-level="error"] {
+        border-color: rgba(169, 67, 50, 0.46);
+        background: rgba(255, 239, 235, 0.96);
+      }
+
+      .bubble__meta {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        margin-bottom: 3px;
+        color: rgba(34, 29, 24, 0.62);
+        font-size: 11px;
+        line-height: 1.2;
+      }
+
+      .bubble__name {
+        color: var(--accent);
+        font-weight: 800;
+      }
+
+      .bubble__title {
+        margin-bottom: 2px;
+        font-size: 13px;
+        font-weight: 800;
+      }
+
+      .bubble__body {
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
       }
 
       .bubble.is-visible {
@@ -311,12 +353,51 @@
         spritePet.style.setProperty("--row", Math.floor(index / COLUMNS));
       }
 
-      function setBubble(text) {
+      function bubblePayload(input) {
+        if (typeof input === "string") {
+          return {
+            level: "info",
+            source: "77",
+            body: input,
+            ttlMs: 3200
+          };
+        }
+        return {
+          level: input.level || "info",
+          source: input.source || "terminal",
+          title: input.title || "",
+          body: input.body || "",
+          ttlMs: input.ttlMs || 5600
+        };
+      }
+
+      function appendBubbleText(className, text) {
         if (!text) return;
-        bubble.textContent = text;
+        const node = document.createElement("div");
+        node.className = className;
+        node.textContent = text;
+        bubble.appendChild(node);
+      }
+
+      function setBubble(input) {
+        const payload = bubblePayload(input);
+        if (!payload.body && !payload.title) return;
+        bubble.replaceChildren();
+        bubble.dataset.level = payload.level;
+        const meta = document.createElement("div");
+        meta.className = "bubble__meta";
+        const name = document.createElement("span");
+        name.className = "bubble__name";
+        name.textContent = "77";
+        const source = document.createElement("span");
+        source.textContent = `${payload.source} · ${payload.level}`;
+        meta.append(name, source);
+        bubble.appendChild(meta);
+        appendBubbleText("bubble__title", payload.title);
+        appendBubbleText("bubble__body", payload.body);
         bubble.classList.add("is-visible");
         clearTimeout(bubbleTimer);
-        bubbleTimer = setTimeout(() => bubble.classList.remove("is-visible"), 3200);
+        bubbleTimer = setTimeout(() => bubble.classList.remove("is-visible"), payload.ttlMs);
       }
 
       function actionFor(name) {
@@ -569,6 +650,11 @@
       });
 
       window.petsona.onConfigChanged(applyConfig);
+      window.petsona.onPetBubble((notification) => {
+        markInteraction();
+        renderAction("click");
+        setBubble(notification);
+      });
       window.petsona.getConfig().then(applyConfig);
       requestAnimationFrame(animate);
     </script>

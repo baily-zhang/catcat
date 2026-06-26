@@ -17,6 +17,11 @@ const petsonaApi = {
     const handler = (_event, config) => callback(config);
     ipcRenderer.on("config:changed", handler);
     return () => ipcRenderer.removeListener("config:changed", handler);
+  },
+  onPetBubble: (callback) => {
+    const handler = (_event, notification) => callback(notification);
+    ipcRenderer.on("pet:bubble", handler);
+    return () => ipcRenderer.removeListener("pet:bubble", handler);
   }
 };
 

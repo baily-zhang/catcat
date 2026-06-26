@@ -5,6 +5,10 @@
   "author": "Petsona",
   "main": "main.js",
   "type": "commonjs",
+  "bin": {
+    "petsona-say": "bin/petsona-say.js",
+    "petsona-run": "bin/petsona-run.js"
+  },
   "scripts": {
     "start": "electron .",
     "test": "node --test",
@@ -27,6 +31,8 @@
     "files": [
       "main.js",
       "src/**",
+      "bin/**",
+      "scripts/**",
       "preload.js",
       "pet.html",
       "panel.html",
