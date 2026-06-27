@@ -12,6 +12,7 @@
         --panel: rgba(255, 252, 241, 0.92);
         --line: rgba(42, 35, 26, 0.16);
         --accent: #2f7b74;
+        --bubble-anchor-offset: 10px;
       }
 
       * {
@@ -84,16 +85,16 @@
       .bubble {
         position: absolute;
         left: 50%;
-        top: 6px;
+        bottom: calc(100% - var(--hit-padding) - var(--bubble-anchor-offset));
         width: min(60%, 188px);
-        max-height: 50px;
-        min-width: 124px;
+        max-height: 48px;
+        min-width: 112px;
         padding: 5px 8px;
         border: 1px solid var(--line);
         border-radius: 10px;
         background: var(--panel);
         box-shadow: 0 10px 30px rgba(34, 29, 24, 0.14);
-        font: 600 10.5px/1.18 ui-rounded, "SF Pro Rounded", "PingFang SC", system-ui, sans-serif;
+        font: 600 10.5px/1.16 ui-rounded, "SF Pro Rounded", "PingFang SC", system-ui, sans-serif;
         overflow: hidden;
         opacity: 0;
         pointer-events: none;
@@ -123,10 +124,10 @@
         display: flex;
         align-items: center;
         gap: 6px;
-        margin-bottom: 2px;
+        margin-bottom: 1px;
         color: rgba(34, 29, 24, 0.62);
         font-size: 9.5px;
-        line-height: 1.2;
+        line-height: 1.12;
         white-space: nowrap;
         overflow: hidden;
       }
@@ -139,6 +140,7 @@
       .bubble__title {
         margin-bottom: 1px;
         font-size: 11.5px;
+        line-height: 1.08;
         font-weight: 800;
         white-space: nowrap;
         overflow: hidden;
@@ -157,8 +159,8 @@
       .bubble__summary {
         display: block;
         color: rgba(34, 29, 24, 0.66);
-        font-size: 10px;
-        line-height: 1.2;
+        font-size: 9.5px;
+        line-height: 1.14;
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
@@ -335,6 +337,8 @@
       let idleTimer = null;
       let actionTimer = null;
       let activeActionName = "idle";
+      let activeActionKey = "";
+      let activeActionSticky = false;
       let stickyNotification = null;
       let dragging = null;
       let suppressNextClick = false;
@@ -417,6 +421,7 @@
         if (level === "warning") return "需交互";
         if (level === "error") return "错误";
         if (level === "success") return "完成";
+        if (level === "info") return "消息";
         return level || "消息";
       }
 
@@ -537,23 +542,33 @@
           : actionForActiveAsset(actionName, fallbackNames)) || actionForActiveAsset("idle");
         if (!action) return;
 
-        clearTimeout(actionTimer);
-        activeActionName = action.name || actionName;
+        const nextActionName = action.name || actionName;
         const kind = actionKind(action);
+        const actionUrl = action.url || config.activeAsset.url;
+        const actionKey = `${kind}:${nextActionName}:${actionUrl || ""}`;
+        if (options.sticky && activeActionSticky && activeActionKey === actionKey) {
+          clearTimeout(actionTimer);
+          return;
+        }
+
+        clearTimeout(actionTimer);
+        activeActionName = nextActionName;
+        activeActionKey = actionKey;
+        activeActionSticky = Boolean(options.sticky);
         hideRenderers();
         setVisualState(activeActionName);
 
         if (kind === "sprite") {
-          spritePet.style.backgroundImage = `url("${action.url || config.activeAsset.url}")`;
+          spritePet.style.backgroundImage = `url("${actionUrl}")`;
           if (activeActionName !== "idle") setFrame(FRONT_FRAME);
           spritePet.classList.remove("hidden");
         } else if (kind === "video") {
-          videoPet.loop = options.sticky || activeActionName === "idle" || activeActionName === "drag";
-          videoPet.src = action.url || config.activeAsset.url;
+          videoPet.loop = activeActionName === "idle" || activeActionName === "drag";
+          videoPet.src = actionUrl;
           videoPet.classList.remove("hidden");
           videoPet.play().catch(() => {});
         } else {
-          replayImage(action.url || config.activeAsset.url, activeActionName);
+          replayImage(actionUrl, activeActionName);
           imagePet.classList.remove("hidden");
         }
 
@@ -644,6 +659,9 @@
       function applyConfig(nextConfig) {
         config = nextConfig;
         document.documentElement.style.setProperty("--hit-padding", `${config.hitPadding || 72}px`);
+        const petSize = Math.max(180, Math.min(560, Number(config.window && config.window.size) || 320));
+        const bubbleAnchorOffset = Math.max(4, Math.round(petSize * 0.04));
+        document.documentElement.style.setProperty("--bubble-anchor-offset", `${bubbleAnchorOffset}px`);
         if (stickyNotification) {
           renderNotification(stickyNotification);
         } else {
