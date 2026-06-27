@@ -22,11 +22,20 @@ function detectSource(env = process.env) {
   return env.TERM_PROGRAM || "terminal";
 }
 
+function detectFocusContext(env = process.env) {
+  return {
+    threadId: env.PETSONA_THREAD_ID || undefined,
+    paneId: env.TMUX_PANE || undefined,
+    terminalProgram: env.TERM_PROGRAM || undefined
+  };
+}
+
 function sendNotification(payload, options = {}) {
   const bridge = options.bridge || loadBridgeConfig(options.bridgeFilePath);
   const endpoint = new URL(bridge.endpoint || `http://${bridge.host}:${bridge.port}/v1/bubble`);
   const body = JSON.stringify({
     source: detectSource(),
+    ...detectFocusContext(),
     ...payload
   });
 
@@ -72,6 +81,7 @@ function sendNotification(payload, options = {}) {
 }
 
 module.exports = {
+  detectFocusContext,
   defaultBridgeFilePath,
   detectSource,
   loadBridgeConfig,

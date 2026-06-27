@@ -14,6 +14,16 @@ const DEFAULT_TTL_MS = {
   warning: 8200,
   error: 10000
 };
+const LEVEL_ALIASES = {
+  action: "warning",
+  complete: "success",
+  completed: "success",
+  done: "success",
+  fail: "error",
+  failed: "error",
+  needs_action: "warning",
+  "needs-action": "warning"
+};
 
 class NotificationBridgeError extends Error {
   constructor(message, statusCode, code) {
@@ -45,8 +55,34 @@ function normalizeTtlMs(value, level) {
   return Math.max(1200, Math.min(30000, parsed));
 }
 
+function normalizeLevel(value) {
+  const level = safeString(value, 32).toLowerCase();
+  const normalized = LEVEL_ALIASES[level] || level;
+  return LEVELS.has(normalized) ? normalized : "info";
+}
+
+function normalizeActions(value) {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((action, index) => {
+      if (!action || typeof action !== "object") return null;
+      const id = safeString(action.id, 80) || `action-${index}`;
+      const label = safeString(action.label, 32);
+      const type = safeString(action.type, 48) || "custom";
+      if (!label) return null;
+      return {
+        id,
+        label,
+        type,
+        payload: action.payload && typeof action.payload === "object" ? action.payload : {}
+      };
+    })
+    .filter(Boolean)
+    .slice(0, 4);
+}
+
 function normalizeNotificationPayload(input = {}) {
-  const level = LEVELS.has(input.level) ? input.level : "info";
+  const level = normalizeLevel(input.level);
   const body = safeString(input.body || input.message || input.text, 900);
   if (!body) {
     throw new NotificationBridgeError("body is required", 400, "body.required");
@@ -55,9 +91,13 @@ function normalizeNotificationPayload(input = {}) {
   return {
     id: safeString(input.id, 80) || `${Date.now()}-${crypto.randomBytes(4).toString("hex")}`,
     source: safeString(input.source, 48) || "terminal",
+    threadId: safeString(input.threadId || input.thread || input.conversationId, 120),
+    paneId: safeString(input.paneId || input.tmuxPane || input.pane, 80),
+    terminalProgram: safeString(input.terminalProgram || input.termProgram, 80),
     level,
     title: safeString(input.title, 120),
     body,
+    actions: normalizeActions(input.actions),
     ttlMs: normalizeTtlMs(input.ttlMs || input.ttl, level),
     createdAt: new Date().toISOString()
   };
@@ -142,8 +182,8 @@ function createNotificationBridge(options = {}) {
     try {
       const body = await readJsonBody(request);
       const notification = normalizeNotificationPayload(body);
-      await onMessage(notification);
-      sendJson(response, 200, { ok: true, notification });
+      const delivery = await onMessage(notification);
+      sendJson(response, 200, { ok: true, notification, delivery });
     } catch (error) {
       const statusCode = error.statusCode || 500;
       sendJson(response, statusCode, {

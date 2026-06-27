@@ -3,6 +3,9 @@ const fs = require("fs");
 const path = require("path");
 const { pathToFileURL } = require("url");
 const { createNotificationBridge } = require("./src/notification/bridge");
+const { normalizeAgentNotificationMode, shouldForwardNotification } = require("./src/notification/filter");
+const { shouldSuppressForTerminalFocus } = require("./src/notification/focus");
+const { createNotificationInbox } = require("./src/notification/inbox");
 const { importPetpack } = require("./src/petpack/importer");
 
 const DEFAULT_ASSET_ID = "default-cat-sprite";
@@ -14,7 +17,9 @@ let panelWindow = null;
 let config = null;
 let petInteractive = false;
 let notificationBridge = null;
+let notificationDisplayTimer = null;
 const pendingPetBubbles = [];
+const notificationInbox = createNotificationInbox();
 
 function userDataPath(...parts) {
   return path.join(app.getPath("userData"), ...parts);
@@ -79,6 +84,12 @@ function defaultConfig() {
     },
     interaction: {
       passthrough: false
+    },
+    startup: {
+      launchAtLogin: false
+    },
+    agentNotifications: {
+      mode: "all"
     }
   };
 }
@@ -111,6 +122,8 @@ function loadConfig() {
       window: { ...fallback.window, ...(parsed.window || {}) },
       idle: { ...fallback.idle, ...(parsed.idle || {}) },
       interaction: { ...fallback.interaction, ...(parsed.interaction || {}) },
+      startup: { ...fallback.startup, ...(parsed.startup || {}) },
+      agentNotifications: { ...fallback.agentNotifications, ...(parsed.agentNotifications || {}) },
       assets: normalizeAssets(parsed.assets, fallback.assets[0]),
       buttons: Array.isArray(parsed.buttons) ? parsed.buttons : fallback.buttons,
       replies: Array.isArray(parsed.replies) ? parsed.replies : fallback.replies
@@ -129,6 +142,45 @@ function loadConfig() {
 function saveConfig(nextConfig = config) {
   ensureStorage();
   fs.writeFileSync(configPath(), JSON.stringify(nextConfig, null, 2));
+}
+
+function loginItemSettings(openAtLogin) {
+  const settings = {
+    openAtLogin: Boolean(openAtLogin)
+  };
+  if (!app.isPackaged) {
+    settings.path = process.execPath;
+    settings.args = [app.getAppPath()];
+  }
+  return settings;
+}
+
+function applyLaunchAtLogin(openAtLogin) {
+  try {
+    app.setLoginItemSettings(loginItemSettings(openAtLogin));
+    return true;
+  } catch (error) {
+    console.error("Failed to update login item:", error);
+    return false;
+  }
+}
+
+function setLaunchAtLoginEnabled(enabled, options = {}) {
+  config.startup = {
+    ...config.startup,
+    launchAtLogin: Boolean(enabled)
+  };
+  if (options.apply !== false) applyLaunchAtLogin(config.startup.launchAtLogin);
+}
+
+function syncLaunchAtLogin() {
+  const launchAtLogin = Boolean(config.startup && config.startup.launchAtLogin);
+  setLaunchAtLoginEnabled(launchAtLogin, { apply: launchAtLogin });
+}
+
+function isNotificationActionPack(asset) {
+  const usage = asset && asset.petpack && asset.petpack.manifest && asset.petpack.manifest.usage;
+  return usage === "notification-actions" || usage === "notificationActions";
 }
 
 function rendererAction(action, asset) {
@@ -228,12 +280,49 @@ function flushPendingPetBubbles() {
   }
 }
 
-function sendPetBubble(notification) {
+function agentNotificationDelivery(notification) {
+  if (!shouldForwardNotification(config.agentNotifications && config.agentNotifications.mode, notification)) {
+    return { forwarded: false, reason: "filtered_by_settings" };
+  }
+  if (shouldSuppressForTerminalFocus(notification)) {
+    return { forwarded: false, reason: "terminal_focused" };
+  }
+  return { forwarded: true };
+}
+
+function emitPetBubble(notification) {
   if (!petWindow || petWindow.isDestroyed() || petWindow.webContents.isLoading()) {
     pendingPetBubbles.push(notification);
     return;
   }
   petWindow.webContents.send("pet:bubble", notification);
+}
+
+function scheduleNotificationDisplayRefresh() {
+  clearTimeout(notificationDisplayTimer);
+  const activeItems = notificationInbox.activeItems();
+  const expiringItems = activeItems.filter((item) => item.expiresAtMs);
+  if (expiringItems.length === 0) return;
+
+  const nextExpiry = Math.min(...expiringItems.map((item) => item.expiresAtMs));
+  notificationDisplayTimer = setTimeout(() => {
+    const current = notificationInbox.current();
+    emitPetBubble(current || { clear: true });
+    scheduleNotificationDisplayRefresh();
+  }, Math.max(80, nextExpiry - Date.now() + 20));
+}
+
+function sendPetBubble(notification) {
+  const delivery = agentNotificationDelivery(notification);
+  if (!delivery.forwarded) return delivery;
+  const current = notificationInbox.add(notification);
+  if (current) emitPetBubble(current);
+  scheduleNotificationDisplayRefresh();
+  return {
+    ...delivery,
+    displayNotificationId: current && current.id,
+    sticky: Boolean(current && current.sticky)
+  };
 }
 
 function createPetWindow() {
@@ -312,6 +401,7 @@ async function startNotificationBridge() {
 
 app.whenReady().then(() => {
   config = loadConfig();
+  syncLaunchAtLogin();
   createPetWindow();
   startNotificationBridge().catch((error) => {
     console.error("Failed to start Petsona notification bridge:", error);
@@ -323,6 +413,7 @@ app.whenReady().then(() => {
 });
 
 app.on("will-quit", () => {
+  clearTimeout(notificationDisplayTimer);
   if (notificationBridge) {
     notificationBridge.close();
     notificationBridge = null;
@@ -391,7 +482,9 @@ ipcMain.handle("petpack:import", async () => {
     } else {
       config.assets.push(asset);
     }
-    config.activeAssetId = asset.id;
+    if (!isNotificationActionPack(asset)) {
+      config.activeAssetId = asset.id;
+    }
     imported.push(asset);
   }
 
@@ -447,6 +540,15 @@ ipcMain.handle("settings:update", (_event, patch) => {
   }
   if (patch.interaction) {
     setPassthroughEnabled(patch.interaction.passthrough, { save: false, broadcast: false });
+  }
+  if (patch.startup) {
+    setLaunchAtLoginEnabled(patch.startup.launchAtLogin);
+  }
+  if (patch.agentNotifications) {
+    config.agentNotifications = {
+      ...config.agentNotifications,
+      mode: normalizeAgentNotificationMode(patch.agentNotifications.mode)
+    };
   }
   if (Array.isArray(patch.replies)) {
     config.replies = patch.replies.map((item) => String(item).trim()).filter(Boolean).slice(0, 40);

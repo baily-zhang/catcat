@@ -8,9 +8,11 @@ function usage() {
     "Usage: petsona-say [options] <message>",
     "",
     "Options:",
-    "  --level <info|success|warning|error>",
+    "  --level <info|needs_action|success|warning|error>",
     "  --title <title>",
+    "  --body <message>",
     "  --source <source>",
+    "  --thread-id <id>",
     "  --ttl <milliseconds>",
     "  --stdin",
     "  --quiet",
@@ -45,8 +47,14 @@ function parseArgs(argv) {
     } else if (arg === "--title" || arg === "-t") {
       options.title = readValue(argv, index, arg);
       index += 1;
+    } else if (arg === "--body" || arg === "-b") {
+      options.body = readValue(argv, index, arg);
+      index += 1;
     } else if (arg === "--source" || arg === "-s") {
       options.source = readValue(argv, index, arg);
+      index += 1;
+    } else if (arg === "--thread-id") {
+      options.threadId = readValue(argv, index, arg);
       index += 1;
     } else if (arg === "--ttl") {
       options.ttlMs = Number(readValue(argv, index, arg));
@@ -71,15 +79,16 @@ async function main() {
   }
 
   const stdin = options.stdin ? fs.readFileSync(0, "utf8").trim() : "";
-  const body = [options.messageParts.join(" "), stdin].filter(Boolean).join("\n").trim();
+  const body = [options.body, options.messageParts.join(" "), stdin].filter(Boolean).join("\n").trim();
   if (!body && !options.title) {
     console.error(usage());
     process.exitCode = 2;
     return;
   }
 
-  await sendNotification({
+  const result = await sendNotification({
     source: options.source,
+    threadId: options.threadId,
     level: options.level,
     title: options.title,
     body,
@@ -87,7 +96,11 @@ async function main() {
   });
 
   if (!options.quiet) {
-    console.log("sent to 77");
+    if (result.delivery && result.delivery.forwarded === false) {
+      console.log(`suppressed: ${result.delivery.reason}`);
+    } else {
+      console.log("sent to 77");
+    }
   }
 }
 

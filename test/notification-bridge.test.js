@@ -52,6 +52,10 @@ test("normalizes terminal notification payloads", () => {
     level: "error",
     title: "Build failed",
     body: "npm test failed",
+    threadId: "agent-build",
+    paneId: "%42",
+    terminalProgram: "iTerm.app",
+    actions: [{ id: "open", label: "查看", type: "focus_source", payload: { paneId: "%42" } }],
     ttlMs: 9000
   });
 
@@ -59,8 +63,19 @@ test("normalizes terminal notification payloads", () => {
   assert.equal(payload.level, "error");
   assert.equal(payload.title, "Build failed");
   assert.equal(payload.body, "npm test failed");
+  assert.equal(payload.threadId, "agent-build");
+  assert.equal(payload.paneId, "%42");
+  assert.equal(payload.terminalProgram, "iTerm.app");
+  assert.deepEqual(payload.actions, [{ id: "open", label: "查看", type: "focus_source", payload: { paneId: "%42" } }]);
   assert.equal(payload.ttlMs, 9000);
   assert.match(payload.createdAt, /^\d{4}-/);
+});
+
+test("normalizes agent notification level aliases", () => {
+  assert.equal(normalizeNotificationPayload({ level: "needs_action", body: "check" }).level, "warning");
+  assert.equal(normalizeNotificationPayload({ level: "needs-action", body: "check" }).level, "warning");
+  assert.equal(normalizeNotificationPayload({ level: "done", body: "ok" }).level, "success");
+  assert.equal(normalizeNotificationPayload({ level: "failed", body: "no" }).level, "error");
 });
 
 test("bridge writes credentials and forwards authorized bubble messages", async (t) => {

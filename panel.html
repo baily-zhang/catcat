@@ -175,6 +175,44 @@
         font: 13px/1.5 ui-monospace, "SFMono-Regular", Menlo, monospace;
       }
 
+      .choice-list {
+        display: grid;
+        gap: 8px;
+      }
+
+      .choice {
+        display: grid;
+        grid-template-columns: auto 1fr;
+        gap: 10px;
+        align-items: start;
+        margin: 0;
+        padding: 11px 12px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: rgba(255, 255, 255, 0.58);
+      }
+
+      .choice:has(input:checked) {
+        border-color: rgba(47, 123, 116, 0.52);
+        background: rgba(237, 248, 243, 0.82);
+      }
+
+      .choice input {
+        margin-top: 3px;
+      }
+
+      .choice strong {
+        display: block;
+        font-size: 13px;
+      }
+
+      .choice span {
+        display: block;
+        color: var(--muted);
+        font-size: 12px;
+        font-weight: 600;
+      }
+
       .row {
         display: flex;
         align-items: center;
@@ -243,6 +281,10 @@
                 鼠标穿透（按住 Command/Ctrl 可点击）
                 <input id="passthroughEnabled" type="checkbox" />
               </label>
+              <label style="margin: 14px 0 0;">
+                开机自启动
+                <input id="startupEnabled" type="checkbox" />
+              </label>
             </div>
           </div>
         </section>
@@ -254,6 +296,31 @@
           </div>
           <div class="body">
             <textarea id="buttonsInput" spellcheck="false"></textarea>
+          </div>
+        </section>
+
+        <section>
+          <div class="section-head">
+            <h2>AI Agent 消息设置</h2>
+            <span class="save-state">单选</span>
+          </div>
+          <div class="body">
+            <div class="choice-list" role="radiogroup" aria-label="AI Agent 消息设置">
+              <label class="choice">
+                <input type="radio" name="agentNotificationMode" value="all" />
+                <span>
+                  <strong>全部消息（需交互、错误、完成）</strong>
+                  <span>适合开发时让 77 汇报完整进度。</span>
+                </span>
+              </label>
+              <label class="choice">
+                <input type="radio" name="agentNotificationMode" value="urgent" />
+                <span>
+                  <strong>紧急（仅需交互和错误）</strong>
+                  <span>过滤完成通知，只保留需要你处理的消息。</span>
+                </span>
+              </label>
+            </div>
           </div>
         </section>
 
@@ -277,9 +344,11 @@
       const idleEnabled = document.getElementById("idleEnabled");
       const idleInterval = document.getElementById("idleInterval");
       const passthroughEnabled = document.getElementById("passthroughEnabled");
+      const startupEnabled = document.getElementById("startupEnabled");
       const buttonsInput = document.getElementById("buttonsInput");
       const repliesInput = document.getElementById("repliesInput");
       const assetState = document.getElementById("assetState");
+      const agentNotificationModeInputs = Array.from(document.querySelectorAll("[name='agentNotificationMode']"));
 
       let config = null;
       let saveTimer = null;
@@ -301,6 +370,10 @@
             };
           })
           .filter((button) => button.label && button.reply);
+      }
+
+      function selectedAgentNotificationMode() {
+        return agentNotificationModeInputs.find((input) => input.checked)?.value || "all";
       }
 
       function renderAssets() {
@@ -351,6 +424,11 @@
         idleEnabled.checked = Boolean(config.idle.enabled);
         idleInterval.value = config.idle.intervalSeconds;
         passthroughEnabled.checked = Boolean(config.interaction && config.interaction.passthrough);
+        startupEnabled.checked = Boolean(config.startup && config.startup.launchAtLogin);
+        const mode = config.agentNotifications && config.agentNotifications.mode === "urgent" ? "urgent" : "all";
+        for (const input of agentNotificationModeInputs) {
+          input.checked = input.value === mode;
+        }
         buttonsInput.value = buttonLines(config.buttons);
         repliesInput.value = config.replies.join("\n");
         assetState.textContent = "";
@@ -369,6 +447,12 @@
             },
             interaction: {
               passthrough: passthroughEnabled.checked
+            },
+            startup: {
+              launchAtLogin: startupEnabled.checked
+            },
+            agentNotifications: {
+              mode: selectedAgentNotificationMode()
             },
             buttons: parseButtonLines(buttonsInput.value),
             replies: repliesInput.value.split("\n").map((line) => line.trim()).filter(Boolean)
@@ -407,6 +491,8 @@
       });
       idleEnabled.addEventListener("change", scheduleSave);
       idleInterval.addEventListener("input", scheduleSave);
+      startupEnabled.addEventListener("change", scheduleSave);
+      agentNotificationModeInputs.forEach((input) => input.addEventListener("change", scheduleSave));
       passthroughEnabled.addEventListener("change", async () => {
         config = await window.petsona.setPassthrough(passthroughEnabled.checked);
         hydrate(config);
