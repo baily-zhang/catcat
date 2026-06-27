@@ -78,6 +78,20 @@ test("normalizes agent notification level aliases", () => {
   assert.equal(normalizeNotificationPayload({ level: "failed", body: "no" }).level, "error");
 });
 
+test("normalizes clear notification payloads without a body", () => {
+  const payload = normalizeNotificationPayload({
+    level: "clear",
+    source: "Codex",
+    threadId: "tmux:%7",
+    paneId: "%7"
+  });
+
+  assert.equal(payload.clear, true);
+  assert.equal(payload.threadId, "tmux:%7");
+  assert.equal(payload.paneId, "%7");
+  assert.equal(payload.body, "");
+});
+
 test("bridge writes credentials and forwards authorized bubble messages", async (t) => {
   const dir = tempDir(t);
   const received = [];

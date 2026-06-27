@@ -14,6 +14,7 @@ function usage() {
     "  --source <source>",
     "  --thread-id <id>",
     "  --ttl <milliseconds>",
+    "  --clear",
     "  --stdin",
     "  --quiet",
     "  --help"
@@ -59,6 +60,8 @@ function parseArgs(argv) {
     } else if (arg === "--ttl") {
       options.ttlMs = Number(readValue(argv, index, arg));
       index += 1;
+    } else if (arg === "--clear") {
+      options.clear = true;
     } else if (arg === "--stdin") {
       options.stdin = true;
     } else if (arg === "--quiet" || arg === "-q") {
@@ -80,7 +83,7 @@ async function main() {
 
   const stdin = options.stdin ? fs.readFileSync(0, "utf8").trim() : "";
   const body = [options.body, options.messageParts.join(" "), stdin].filter(Boolean).join("\n").trim();
-  if (!body && !options.title) {
+  if (!options.clear && !body && !options.title) {
     console.error(usage());
     process.exitCode = 2;
     return;
@@ -89,6 +92,7 @@ async function main() {
   const result = await sendNotification({
     source: options.source,
     threadId: options.threadId,
+    clear: options.clear,
     level: options.level,
     title: options.title,
     body,

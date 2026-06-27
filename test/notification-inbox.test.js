@@ -63,3 +63,25 @@ test("expires transient notifications but keeps sticky notifications", () => {
   assert.equal(inbox.activeItems(2101).length, 1);
   assert.equal(inbox.current(2101).id, "ask");
 });
+
+test("detects sticky state for matching notification threads", () => {
+  const inbox = createNotificationInbox();
+  inbox.add({ id: "ask", paneId: "%7", level: "warning", source: "tmux", body: "approve" }, 1000);
+
+  assert.equal(inbox.hasStickyThread({ paneId: "%7", level: "success", source: "tmux" }, 1200), true);
+  assert.equal(inbox.hasStickyThread({ paneId: "%8", level: "success", source: "tmux" }, 1200), false);
+
+  inbox.add({ id: "ok", paneId: "%7", level: "success", source: "tmux", body: "done", ttlMs: 1000 }, 1300);
+  assert.equal(inbox.hasStickyThread({ paneId: "%7", level: "success", source: "tmux" }, 1400), false);
+});
+
+test("clears a matching notification thread", () => {
+  const inbox = createNotificationInbox();
+  inbox.add({ id: "ask", threadId: "tmux:%7", level: "warning", source: "tmux", body: "approve" }, 1000);
+  inbox.add({ id: "err", threadId: "tmux:%8", level: "error", source: "tmux", body: "failed" }, 1100);
+
+  const current = inbox.clearThread({ threadId: "tmux:%7" }, 1200);
+
+  assert.equal(inbox.hasStickyThread({ threadId: "tmux:%7" }, 1200), false);
+  assert.equal(current.id, "err");
+});

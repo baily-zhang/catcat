@@ -281,13 +281,25 @@ function flushPendingPetBubbles() {
 }
 
 function agentNotificationDelivery(notification) {
-  if (!shouldForwardNotification(config.agentNotifications && config.agentNotifications.mode, notification)) {
+  if (notification && notification.clear) {
+    return { forwarded: true, reason: "clear" };
+  }
+
+  const resolvesStickyThread =
+    notification &&
+    (notification.level === "success" || notification.level === "error") &&
+    notificationInbox.hasStickyThread(notification);
+
+  if (!resolvesStickyThread && !shouldForwardNotification(config.agentNotifications && config.agentNotifications.mode, notification)) {
     return { forwarded: false, reason: "filtered_by_settings" };
   }
-  if (shouldSuppressForTerminalFocus(notification)) {
+  if (!resolvesStickyThread && shouldSuppressForTerminalFocus(notification)) {
     return { forwarded: false, reason: "terminal_focused" };
   }
-  return { forwarded: true };
+  return {
+    forwarded: true,
+    reason: resolvesStickyThread ? "sticky_resolution" : undefined
+  };
 }
 
 function emitPetBubble(notification) {
@@ -315,6 +327,16 @@ function scheduleNotificationDisplayRefresh() {
 function sendPetBubble(notification) {
   const delivery = agentNotificationDelivery(notification);
   if (!delivery.forwarded) return delivery;
+  if (notification.clear) {
+    const current = notificationInbox.clearThread(notification);
+    emitPetBubble(current || { clear: true });
+    scheduleNotificationDisplayRefresh();
+    return {
+      ...delivery,
+      displayNotificationId: current && current.id,
+      sticky: Boolean(current && current.sticky)
+    };
+  }
   const current = notificationInbox.add(notification);
   if (current) emitPetBubble(current);
   scheduleNotificationDisplayRefresh();

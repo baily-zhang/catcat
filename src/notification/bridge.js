@@ -8,6 +8,7 @@ const DEFAULT_HOST = "127.0.0.1";
 const DEFAULT_PORT = 20177;
 const MAX_BODY_BYTES = 12 * 1024;
 const LEVELS = new Set(["info", "success", "warning", "error"]);
+const CLEAR_LEVELS = new Set(["clear", "resolved", "dismiss", "dismissed"]);
 const DEFAULT_TTL_MS = {
   info: 5600,
   success: 5200,
@@ -61,6 +62,11 @@ function normalizeLevel(value) {
   return LEVELS.has(normalized) ? normalized : "info";
 }
 
+function isClearPayload(input = {}) {
+  const level = safeString(input.level, 32).toLowerCase();
+  return input.clear === true || CLEAR_LEVELS.has(level);
+}
+
 function normalizeActions(value) {
   if (!Array.isArray(value)) return [];
   return value
@@ -82,9 +88,10 @@ function normalizeActions(value) {
 }
 
 function normalizeNotificationPayload(input = {}) {
+  const clear = isClearPayload(input);
   const level = normalizeLevel(input.level);
   const body = safeString(input.body || input.message || input.text, 900);
-  if (!body) {
+  if (!clear && !body) {
     throw new NotificationBridgeError("body is required", 400, "body.required");
   }
 
@@ -94,6 +101,7 @@ function normalizeNotificationPayload(input = {}) {
     threadId: safeString(input.threadId || input.thread || input.conversationId, 120),
     paneId: safeString(input.paneId || input.tmuxPane || input.pane, 80),
     terminalProgram: safeString(input.terminalProgram || input.termProgram, 80),
+    clear,
     level,
     title: safeString(input.title, 120),
     body,

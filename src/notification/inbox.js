@@ -118,6 +118,19 @@ function createNotificationInbox(options = {}) {
       prune(now);
       return current(now);
     },
+    clearThread(notification, now = Date.now()) {
+      itemsByThread.delete(normalizeThreadId(notification));
+      prune(now);
+      return current(now);
+    },
+    itemFor(notification, now = Date.now()) {
+      prune(now);
+      return itemsByThread.get(normalizeThreadId(notification)) || null;
+    },
+    hasStickyThread(notification, now = Date.now()) {
+      const item = this.itemFor(notification, now);
+      return Boolean(item && item.sticky && isActive(item, now));
+    },
     current,
     activeItems,
     clear() {
