@@ -183,3 +183,46 @@ test("accepts drag as a recognized v1 interaction action", () => {
   assert.equal(result.valid, true);
   assert.equal(result.warnings.some((warning) => warning.code === "action.name.unknown"), false);
 });
+
+test("accepts notification actions with png and video assets", () => {
+  const result = validateManifest(
+    validManifest({
+      actions: {
+        idle: {
+          type: "png",
+          src: "assets/idle.png"
+        },
+        needsAction: {
+          type: "png",
+          src: "assets/needs-action.png",
+          loop: false,
+          trigger: "needs_action"
+        },
+        error: {
+          type: "webm",
+          src: "assets/error.webm",
+          loop: false,
+          trigger: "error"
+        },
+        success: {
+          type: "mov",
+          src: "assets/success.mov",
+          loop: false,
+          trigger: "success"
+        }
+      }
+    }),
+    {
+      availableFiles: [
+        "assets/idle.png",
+        "assets/needs-action.png",
+        "assets/error.webm",
+        "assets/success.mov",
+        "previews/thumbnail.webp"
+      ]
+    }
+  );
+
+  assert.equal(result.valid, true);
+  assert.equal(result.warnings.some((warning) => warning.code === "action.name.unknown"), false);
+});

@@ -84,15 +84,17 @@
       .bubble {
         position: absolute;
         left: 50%;
-        top: 7%;
-        max-width: min(86%, 280px);
-        min-width: 156px;
-        padding: 10px 12px;
+        top: 6px;
+        width: min(60%, 188px);
+        max-height: 50px;
+        min-width: 124px;
+        padding: 5px 8px;
         border: 1px solid var(--line);
         border-radius: 10px;
         background: var(--panel);
         box-shadow: 0 10px 30px rgba(34, 29, 24, 0.14);
-        font: 600 13px/1.35 ui-rounded, "SF Pro Rounded", "PingFang SC", system-ui, sans-serif;
+        font: 600 10.5px/1.18 ui-rounded, "SF Pro Rounded", "PingFang SC", system-ui, sans-serif;
+        overflow: hidden;
         opacity: 0;
         pointer-events: none;
         transform: translate(-50%, -8px) scale(0.98);
@@ -100,28 +102,33 @@
       }
 
       .bubble[data-level="success"] {
-        border-color: rgba(47, 123, 116, 0.38);
-        background: rgba(239, 249, 238, 0.94);
+        border-color: rgba(67, 142, 94, 0.28);
+        background: rgba(242, 251, 244, 0.96);
+        box-shadow: 0 10px 30px rgba(67, 142, 94, 0.1);
       }
 
       .bubble[data-level="warning"] {
-        border-color: rgba(177, 120, 44, 0.42);
-        background: rgba(255, 246, 221, 0.95);
+        border-color: rgba(196, 145, 48, 0.3);
+        background: rgba(255, 250, 232, 0.96);
+        box-shadow: 0 10px 30px rgba(196, 145, 48, 0.11);
       }
 
       .bubble[data-level="error"] {
-        border-color: rgba(169, 67, 50, 0.46);
-        background: rgba(255, 239, 235, 0.96);
+        border-color: rgba(190, 83, 75, 0.3);
+        background: rgba(255, 244, 242, 0.96);
+        box-shadow: 0 10px 30px rgba(190, 83, 75, 0.1);
       }
 
       .bubble__meta {
         display: flex;
         align-items: center;
         gap: 6px;
-        margin-bottom: 3px;
+        margin-bottom: 2px;
         color: rgba(34, 29, 24, 0.62);
-        font-size: 11px;
+        font-size: 9.5px;
         line-height: 1.2;
+        white-space: nowrap;
+        overflow: hidden;
       }
 
       .bubble__name {
@@ -130,14 +137,31 @@
       }
 
       .bubble__title {
-        margin-bottom: 2px;
-        font-size: 13px;
+        margin-bottom: 1px;
+        font-size: 11.5px;
         font-weight: 800;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
       }
 
       .bubble__body {
-        white-space: pre-wrap;
+        display: block;
+        color: rgba(34, 29, 24, 0.82);
+        overflow: hidden;
+        white-space: nowrap;
         overflow-wrap: anywhere;
+        text-overflow: ellipsis;
+      }
+
+      .bubble__summary {
+        display: block;
+        color: rgba(34, 29, 24, 0.66);
+        font-size: 10px;
+        line-height: 1.2;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
       }
 
       .bubble.is-visible {
@@ -311,6 +335,7 @@
       let idleTimer = null;
       let actionTimer = null;
       let activeActionName = "idle";
+      let stickyNotification = null;
       let dragging = null;
       let suppressNextClick = false;
       let interactiveOverride = false;
@@ -359,7 +384,8 @@
             level: "info",
             source: "77",
             body: input,
-            ttlMs: 3200
+            ttlMs: 3200,
+            sticky: false
           };
         }
         return {
@@ -367,7 +393,9 @@
           source: input.source || "terminal",
           title: input.title || "",
           body: input.body || "",
-          ttlMs: input.ttlMs || 5600
+          summaryText: input.summaryText || "",
+          ttlMs: input.ttlMs || 5600,
+          sticky: Boolean(input.sticky)
         };
       }
 
@@ -379,9 +407,29 @@
         bubble.appendChild(node);
       }
 
+      function compactText(text, maxLength = 54) {
+        const value = String(text || "").replace(/\s+/g, " ").trim();
+        if (value.length <= maxLength) return value;
+        return `${value.slice(0, maxLength - 1)}…`;
+      }
+
+      function levelLabel(level) {
+        if (level === "warning") return "需交互";
+        if (level === "error") return "错误";
+        if (level === "success") return "完成";
+        return level || "消息";
+      }
+
       function setBubble(input) {
+        if (input && input.clear) {
+          stickyNotification = null;
+          clearTimeout(bubbleTimer);
+          bubble.classList.remove("is-visible");
+          return;
+        }
         const payload = bubblePayload(input);
         if (!payload.body && !payload.title) return;
+        stickyNotification = payload.sticky ? input : null;
         bubble.replaceChildren();
         bubble.dataset.level = payload.level;
         const meta = document.createElement("div");
@@ -390,21 +438,50 @@
         name.className = "bubble__name";
         name.textContent = "77";
         const source = document.createElement("span");
-        source.textContent = payload.source === "77" ? `· ${payload.level}` : `${payload.source} · ${payload.level}`;
+        source.textContent = payload.source === "77" ? `· ${levelLabel(payload.level)}` : `${payload.source} · ${levelLabel(payload.level)}`;
         meta.append(name, source);
         bubble.appendChild(meta);
-        appendBubbleText("bubble__title", payload.title);
-        appendBubbleText("bubble__body", payload.body);
+        appendBubbleText("bubble__title", compactText(payload.title || payload.body, 20));
+        appendBubbleText("bubble__body", compactText(payload.summaryText || (payload.title ? payload.body : ""), 26));
         bubble.classList.add("is-visible");
         clearTimeout(bubbleTimer);
-        bubbleTimer = setTimeout(() => bubble.classList.remove("is-visible"), payload.ttlMs);
+        if (!payload.sticky) {
+          bubbleTimer = setTimeout(() => bubble.classList.remove("is-visible"), payload.ttlMs);
+        }
       }
 
-      function actionFor(name) {
+      function actionForActiveAsset(name, fallbackNames = []) {
         const asset = config && config.activeAsset;
         if (!asset) return null;
         const actions = asset.actions || {};
-        return actions[name] || (name !== "idle" ? actions.idle : null);
+        for (const actionName of [name, ...fallbackNames]) {
+          if (actions[actionName]) return actions[actionName];
+        }
+        return name !== "idle" ? actions.idle : null;
+      }
+
+      function actionForAnyAsset(name, fallbackNames = []) {
+        const activeAsset = config && config.activeAsset;
+        if (!activeAsset) return null;
+        const activeActions = activeAsset.actions || {};
+        if (activeActions[name]) return activeActions[name];
+
+        for (const asset of config.assets || []) {
+          if (!asset || asset.id === activeAsset.id) continue;
+          const actions = asset.actions || {};
+          if (actions[name]) return actions[name];
+        }
+
+        for (const fallbackName of fallbackNames) {
+          if (activeActions[fallbackName]) return activeActions[fallbackName];
+          for (const asset of config.assets || []) {
+            if (!asset || asset.id === activeAsset.id) continue;
+            const actions = asset.actions || {};
+            if (actions[fallbackName]) return actions[fallbackName];
+          }
+        }
+
+        return null;
       }
 
       function actionKind(action) {
@@ -453,9 +530,11 @@
         imagePet.src = url;
       }
 
-      function renderAction(actionName) {
+      function renderAction(actionName, fallbackNames = [], options = {}) {
         if (!config) return;
-        const action = actionFor(actionName) || actionFor("idle");
+        const action = (options.searchAllAssets
+          ? actionForAnyAsset(actionName, fallbackNames)
+          : actionForActiveAsset(actionName, fallbackNames)) || actionForActiveAsset("idle");
         if (!action) return;
 
         clearTimeout(actionTimer);
@@ -469,7 +548,7 @@
           if (activeActionName !== "idle") setFrame(FRONT_FRAME);
           spritePet.classList.remove("hidden");
         } else if (kind === "video") {
-          videoPet.loop = activeActionName === "idle" || activeActionName === "drag";
+          videoPet.loop = options.sticky || activeActionName === "idle" || activeActionName === "drag";
           videoPet.src = action.url || config.activeAsset.url;
           videoPet.classList.remove("hidden");
           videoPet.play().catch(() => {});
@@ -479,13 +558,34 @@
         }
 
         const duration = actionDuration(action);
-        if (duration) {
+        if (duration && !options.sticky) {
           actionTimer = setTimeout(() => renderAction("idle"), duration);
         }
       }
 
       function markInteraction() {
         resetIdleTimer();
+      }
+
+      function notificationAction(notification) {
+        if (notification.level === "warning") return { name: "needsAction", fallbacks: ["message", "click"] };
+        if (notification.level === "error") return { name: "error", fallbacks: ["message", "click"] };
+        if (notification.level === "success") return { name: "success", fallbacks: ["message", "click"] };
+        return { name: "message", fallbacks: ["click"] };
+      }
+
+      function renderNotification(notification) {
+        if (notification && notification.clear) {
+          setBubble(notification);
+          renderAction("idle");
+          return;
+        }
+        const action = notificationAction(notification);
+        renderAction(action.name, action.fallbacks, {
+          searchAllAssets: true,
+          sticky: Boolean(notification.sticky)
+        });
+        setBubble(notification);
       }
 
       function setTemporaryInteractive(nextInteractive) {
@@ -515,6 +615,10 @@
           node.addEventListener("click", async (event) => {
             event.stopPropagation();
             markInteraction();
+            if (stickyNotification) {
+              renderNotification(stickyNotification);
+              return;
+            }
             renderAction("click");
             setBubble(await window.petsona.interact(button.id));
           });
@@ -527,6 +631,10 @@
         if (!config || !config.idle.enabled) return;
         const ms = Math.max(10, Number(config.idle.intervalSeconds || 300)) * 1000;
         idleTimer = setTimeout(async () => {
+          if (stickyNotification) {
+            resetIdleTimer();
+            return;
+          }
           renderAction("idle");
           setBubble(await window.petsona.randomReply());
           resetIdleTimer();
@@ -536,7 +644,11 @@
       function applyConfig(nextConfig) {
         config = nextConfig;
         document.documentElement.style.setProperty("--hit-padding", `${config.hitPadding || 72}px`);
-        renderAction("idle");
+        if (stickyNotification) {
+          renderNotification(stickyNotification);
+        } else {
+          renderAction("idle");
+        }
         renderButtons();
         resetIdleTimer();
       }
@@ -609,7 +721,11 @@
       document.addEventListener("pointerup", (event) => {
         if (dragging) {
           suppressNextClick = dragging.moved;
-          renderAction("idle");
+          if (stickyNotification) {
+            renderNotification(stickyNotification);
+          } else {
+            renderAction("idle");
+          }
         }
         dragging = null;
         if (!hasAccessModifier(event) || !document.body.matches(":hover")) setTemporaryInteractive(false);
@@ -628,6 +744,11 @@
           return;
         }
         markInteraction();
+        if (stickyNotification) {
+          renderNotification(stickyNotification);
+          if (!hasAccessModifier(event)) setTemporaryInteractive(false);
+          return;
+        }
         renderAction("click");
         setBubble(await window.petsona.randomReply());
         if (!hasAccessModifier(event)) setTemporaryInteractive(false);
@@ -652,8 +773,7 @@
       window.petsona.onConfigChanged(applyConfig);
       window.petsona.onPetBubble((notification) => {
         markInteraction();
-        renderAction("click");
-        setBubble(notification);
+        renderNotification(notification);
       });
       window.petsona.getConfig().then(applyConfig);
       requestAnimationFrame(animate);

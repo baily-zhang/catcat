@@ -29,10 +29,10 @@ space-character.petpack
 example.petpack
 ├── manifest.json
 ├── assets/
-│   ├── idle.webp
+│   ├── idle.png
 │   ├── blink.webp
 │   ├── click.webp
-│   └── look-around.webp
+│   └── needs-action.png
 ├── previews/
 │   ├── thumbnail.webp
 │   └── preview-low.webp
@@ -49,6 +49,7 @@ Only `manifest.json` and at least one renderable action asset are required for V
   "id": "petsona.example.dog",
   "name": "Example Dog",
   "author": "Petsona Studio",
+  "usage": "primary",
   "createdAt": "2026-06-16T00:00:00.000Z",
   "renderer": {
     "type": "webp-sequence",
@@ -114,7 +115,20 @@ Only `manifest.json` and at least one renderable action asset are required for V
 - `actions`: object containing at least `idle`.
 - `actions.idle.src`: path to a package-local asset.
 
+## Optional Usage
+
+- `usage: "primary"` or missing: normal pet pack. Importing can make it the active pet.
+- `usage: "notification-actions"`: action library for terminal/AI Agent notifications. Importing keeps the current active pet and only borrows matching actions such as `needsAction`.
+
 ## Action Types
+
+V1 action assets can use:
+
+- `webp`: static or animated WebP.
+- `png`: static PNG or animated PNG/APNG.
+- `webm`: video action asset.
+- `mp4`: video action asset.
+- `mov`: video action asset.
 
 V1 supports:
 
@@ -122,6 +136,9 @@ V1 supports:
 - `blink`: short non-looping idle variation.
 - `click`: short non-looping response to click.
 - `drag`: looping response while the user holds and drags the pet.
+- `needsAction`: action used for AI agent messages that require attention.
+- `error`: action used for AI agent error messages.
+- `success`: action used for AI agent completion messages.
 
 Post-V1 supports:
 
