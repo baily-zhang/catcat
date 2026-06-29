@@ -22,6 +22,11 @@ const petsonaApi = {
     const handler = (_event, notification) => callback(notification);
     ipcRenderer.on("pet:bubble", handler);
     return () => ipcRenderer.removeListener("pet:bubble", handler);
+  },
+  onPointerCursor: (callback) => {
+    const handler = (_event, payload) => callback(payload);
+    ipcRenderer.on("pet:pointer-cursor", handler);
+    return () => ipcRenderer.removeListener("pet:pointer-cursor", handler);
   }
 };
 

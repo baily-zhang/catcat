@@ -11,11 +11,16 @@ const { importPetpack } = require("./src/petpack/importer");
 const DEFAULT_ASSET_ID = "default-cat-sprite";
 const HIT_PADDING = 72;
 const DEFAULT_IDLE_SECONDS = 300;
+const PET_HOVER_EXIT_GRACE_MS = 260;
+const PET_POINTER_POLL_MS = 33;
 
 let petWindow = null;
 let panelWindow = null;
 let config = null;
-let petInteractive = false;
+let petRendererInteractive = false;
+let petHoverInteractive = false;
+let petHoverMonitor = null;
+let lastPetHoverAtMs = 0;
 let notificationBridge = null;
 let notificationDisplayTimer = null;
 const pendingPetBubbles = [];
@@ -232,9 +237,70 @@ function assetCanRender(asset) {
 function applyMousePassthrough() {
   if (!petWindow || petWindow.isDestroyed()) return;
   const passthrough = Boolean(config.interaction && config.interaction.passthrough);
-  petWindow.setIgnoreMouseEvents(passthrough && !petInteractive, {
-    forward: true
+  const shouldIgnoreMouse = passthrough && !petRendererInteractive && !petHoverInteractive;
+  if (shouldIgnoreMouse) {
+    petWindow.setIgnoreMouseEvents(true, { forward: true });
+  } else {
+    petWindow.setIgnoreMouseEvents(false);
+  }
+}
+
+function emitPetPointerCursor(active = petHoverInteractive) {
+  if (!petWindow || petWindow.isDestroyed() || petWindow.webContents.isLoading()) return;
+  petWindow.webContents.send("pet:pointer-cursor", {
+    active: Boolean(active)
   });
+}
+
+function cursorInsidePetWindowRegion() {
+  if (!petWindow || petWindow.isDestroyed()) return false;
+  const bounds = petWindow.getBounds();
+  const point = screen.getCursorScreenPoint();
+  return (
+    point.x >= bounds.x &&
+    point.x <= bounds.x + bounds.width &&
+    point.y >= bounds.y &&
+    point.y <= bounds.y + bounds.height
+  );
+}
+
+function nextPetHoverInteractive() {
+  const now = Date.now();
+  if (cursorInsidePetWindowRegion()) {
+    lastPetHoverAtMs = now;
+    return true;
+  }
+  return petHoverInteractive && cursorInsidePetWindowRegion() && now - lastPetHoverAtMs <= PET_HOVER_EXIT_GRACE_MS;
+}
+
+function updatePetHoverInteractive() {
+  const nextHoverInteractive = nextPetHoverInteractive();
+  if (petHoverInteractive === nextHoverInteractive) return;
+
+  if (!nextHoverInteractive) {
+    petHoverInteractive = false;
+    emitPetPointerCursor(false);
+    applyMousePassthrough();
+    return;
+  }
+
+  petHoverInteractive = true;
+  applyMousePassthrough();
+  emitPetPointerCursor(true);
+}
+
+function startPetHoverMonitor() {
+  if (petHoverMonitor) return;
+  petHoverMonitor = setInterval(updatePetHoverInteractive, PET_POINTER_POLL_MS);
+  if (typeof petHoverMonitor.unref === "function") petHoverMonitor.unref();
+}
+
+function stopPetHoverMonitor() {
+  clearInterval(petHoverMonitor);
+  petHoverMonitor = null;
+  petHoverInteractive = false;
+  lastPetHoverAtMs = 0;
+  emitPetPointerCursor(false);
 }
 
 function setPassthroughEnabled(passthrough, options = {}) {
@@ -242,7 +308,10 @@ function setPassthroughEnabled(passthrough, options = {}) {
     ...config.interaction,
     passthrough: Boolean(passthrough)
   };
-  petInteractive = false;
+  petRendererInteractive = false;
+  petHoverInteractive = false;
+  lastPetHoverAtMs = 0;
+  emitPetPointerCursor(false);
   applyMousePassthrough();
   if (options.save !== false) saveConfig();
   if (options.broadcast !== false) broadcastConfig();
@@ -328,7 +397,12 @@ function sendPetBubble(notification) {
   const delivery = agentNotificationDelivery(notification);
   if (!delivery.forwarded) return delivery;
   if (notification.clear) {
-    const current = notificationInbox.clearThread(notification);
+    let current = null;
+    if (notification.clearAll) {
+      notificationInbox.clear();
+    } else {
+      current = notificationInbox.clearThread(notification);
+    }
     emitPetBubble(current || { clear: true });
     scheduleNotificationDisplayRefresh();
     return {
@@ -374,10 +448,12 @@ function createPetWindow() {
   petWindow.loadFile(path.join(__dirname, "pet.html"));
   petWindow.webContents.on("did-finish-load", flushPendingPetBubbles);
   petWindow.once("ready-to-show", () => {
+    startPetHoverMonitor();
     applyMousePassthrough();
     petWindow.show();
   });
   petWindow.on("closed", () => {
+    stopPetHoverMonitor();
     petWindow = null;
   });
 }
@@ -614,7 +690,7 @@ ipcMain.handle("pet:set-passthrough", (_event, passthrough) => {
 });
 
 ipcMain.handle("pet:set-interactive", (_event, interactive) => {
-  petInteractive = Boolean(interactive);
+  petRendererInteractive = Boolean(interactive);
   applyMousePassthrough();
   return true;
 });

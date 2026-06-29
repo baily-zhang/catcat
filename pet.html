@@ -30,9 +30,14 @@
         overflow: hidden;
         color: var(--ink);
         background: transparent;
-        cursor: none;
+        cursor: default;
         user-select: none;
         -webkit-user-select: none;
+      }
+
+      body.is-cursor-active,
+      body.is-cursor-active * {
+        cursor: none !important;
       }
 
       .pet-shell {
@@ -202,10 +207,10 @@
         pointer-events: none;
         transform: translate(-50%, -50%);
         filter: drop-shadow(0 5px 8px rgba(34, 29, 24, 0.22));
-        transition: opacity 80ms ease;
+        transition: opacity 60ms ease;
       }
 
-      body.is-hovering .fish-cursor {
+      body.is-cursor-active .fish-cursor {
         opacity: 1;
       }
 
@@ -301,6 +306,7 @@
       const HEAD_ANCHOR = { x: 0.5, y: 0.34 };
       const ANGLE_SMOOTHING = 0.24;
       const CENTER_DEAD_ZONE = 0.17;
+      const CURSOR_ARM_DELAY_MS = 90;
       const ANGLE_KEYS = [
         { angle: 0, frame: 270, name: "up" },
         { angle: 20, frame: 20, name: "up" },
@@ -342,7 +348,12 @@
       let stickyNotification = null;
       let dragging = null;
       let suppressNextClick = false;
-      let interactiveOverride = false;
+      let interactiveOverride = null;
+      let hoveringPet = false;
+      let cursorArmed = false;
+      let cursorReadyAt = 0;
+      let cursorEnteredAfterArm = false;
+      let cursorVisible = false;
 
       function mod(value, base) {
         return ((value % base) + base) % base;
@@ -592,6 +603,9 @@
       function renderNotification(notification) {
         if (notification && notification.clear) {
           setBubble(notification);
+          activeActionSticky = false;
+          activeActionKey = "";
+          clearTimeout(actionTimer);
           renderAction("idle");
           return;
         }
@@ -603,15 +617,26 @@
         setBubble(notification);
       }
 
-      function setTemporaryInteractive(nextInteractive) {
-        if (!config || !config.interaction || !config.interaction.passthrough) return;
-        if (interactiveOverride === nextInteractive) return;
-        interactiveOverride = nextInteractive;
-        window.petsona.setInteractive(nextInteractive);
+      function setTemporaryInteractive(nextInteractive, options = {}) {
+        if (!config || !config.interaction || !config.interaction.passthrough) {
+          interactiveOverride = null;
+          return Promise.resolve(false);
+        }
+        const interactive = Boolean(nextInteractive);
+        if (!options.force && interactiveOverride === interactive) return Promise.resolve(false);
+        interactiveOverride = interactive;
+        return window.petsona.setInteractive(interactive).catch(() => {
+          if (interactiveOverride === interactive) interactiveOverride = null;
+          return false;
+        });
       }
 
       function hasAccessModifier(event) {
         return Boolean(event && (event.metaKey || event.ctrlKey));
+      }
+
+      function isHoveringPet() {
+        return cursorArmed || document.body.matches(":hover");
       }
 
       function syncModifierInteractive(event) {
@@ -658,6 +683,7 @@
 
       function applyConfig(nextConfig) {
         config = nextConfig;
+        interactiveOverride = null;
         document.documentElement.style.setProperty("--hit-padding", `${config.hitPadding || 72}px`);
         const petSize = Math.max(180, Math.min(560, Number(config.window && config.window.size) || 320));
         const bubbleAnchorOffset = Math.max(4, Math.round(petSize * 0.04));
@@ -674,7 +700,11 @@
       function updateFishCursor(event) {
         fishCursor.style.left = `${event.clientX}px`;
         fishCursor.style.top = `${event.clientY}px`;
-        document.body.classList.add("is-hovering");
+        hoveringPet = true;
+        if (cursorArmed && cursorEnteredAfterArm && !cursorVisible && performance.now() >= cursorReadyAt) {
+          cursorVisible = true;
+          document.body.classList.add("is-cursor-active");
+        }
       }
 
       function updateAngleFromPointer(event) {
@@ -733,6 +763,7 @@
       document.addEventListener("pointerdown", startDrag);
       document.addEventListener("pointermove", moveDrag);
       document.addEventListener("pointerenter", (event) => {
+        if (cursorArmed) cursorEnteredAfterArm = true;
         updateFishCursor(event);
         syncModifierInteractive(event);
       });
@@ -746,10 +777,13 @@
           }
         }
         dragging = null;
-        if (!hasAccessModifier(event) || !document.body.matches(":hover")) setTemporaryInteractive(false);
+        if (!hasAccessModifier(event) && !isHoveringPet()) setTemporaryInteractive(false);
       });
       document.addEventListener("pointerleave", () => {
-        document.body.classList.remove("is-hovering");
+        hoveringPet = false;
+        cursorEnteredAfterArm = false;
+        cursorVisible = false;
+        document.body.classList.remove("is-cursor-active");
         targetAngle = null;
         displayAngle = null;
         if (activeActionName === "idle") setFrame(FRONT_FRAME);
@@ -764,12 +798,12 @@
         markInteraction();
         if (stickyNotification) {
           renderNotification(stickyNotification);
-          if (!hasAccessModifier(event)) setTemporaryInteractive(false);
+          if (!hasAccessModifier(event) && !isHoveringPet()) setTemporaryInteractive(false);
           return;
         }
         renderAction("click");
         setBubble(await window.petsona.randomReply());
-        if (!hasAccessModifier(event)) setTemporaryInteractive(false);
+        if (!hasAccessModifier(event) && !isHoveringPet()) setTemporaryInteractive(false);
       });
       document.addEventListener("contextmenu", (event) => {
         event.preventDefault();
@@ -784,7 +818,7 @@
       });
       document.addEventListener("keyup", (event) => {
         if ((event.key === "Meta" || event.key === "Control") && !dragging) {
-          setTemporaryInteractive(false);
+          syncModifierInteractive(event);
         }
       });
 
@@ -793,6 +827,17 @@
         markInteraction();
         renderNotification(notification);
       });
+      function applyPointerCursor(payload) {
+        cursorArmed = Boolean(payload && payload.active);
+        cursorReadyAt = cursorArmed ? performance.now() + CURSOR_ARM_DELAY_MS : 0;
+        cursorEnteredAfterArm = false;
+        if (!cursorArmed) {
+          cursorVisible = false;
+          document.body.classList.remove("is-cursor-active");
+        }
+      }
+
+      window.petsona.onPointerCursor(applyPointerCursor);
       window.petsona.getConfig().then(applyConfig);
       requestAnimationFrame(animate);
     </script>
