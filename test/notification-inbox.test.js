@@ -85,3 +85,14 @@ test("clears a matching notification thread", () => {
   assert.equal(inbox.hasStickyThread({ threadId: "tmux:%7" }, 1200), false);
   assert.equal(current.id, "err");
 });
+
+test("clears all notification threads", () => {
+  const inbox = createNotificationInbox();
+  inbox.add({ id: "ask", threadId: "tmux:%7", level: "warning", source: "tmux", body: "approve" }, 1000);
+  inbox.add({ id: "err", threadId: "tmux:%8", level: "error", source: "tmux", body: "failed" }, 1100);
+
+  inbox.clear();
+
+  assert.equal(inbox.size, 0);
+  assert.equal(inbox.current(1200), null);
+});

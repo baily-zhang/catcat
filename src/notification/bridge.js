@@ -89,6 +89,7 @@ function normalizeActions(value) {
 
 function normalizeNotificationPayload(input = {}) {
   const clear = isClearPayload(input);
+  const clearAll = clear && input.clearAll === true;
   const level = normalizeLevel(input.level);
   const body = safeString(input.body || input.message || input.text, 900);
   if (!clear && !body) {
@@ -102,6 +103,7 @@ function normalizeNotificationPayload(input = {}) {
     paneId: safeString(input.paneId || input.tmuxPane || input.pane, 80),
     terminalProgram: safeString(input.terminalProgram || input.termProgram, 80),
     clear,
+    clearAll,
     level,
     title: safeString(input.title, 120),
     body,

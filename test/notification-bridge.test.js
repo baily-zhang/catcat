@@ -92,6 +92,18 @@ test("normalizes clear notification payloads without a body", () => {
   assert.equal(payload.body, "");
 });
 
+test("normalizes clear-all notification payloads", () => {
+  const payload = normalizeNotificationPayload({
+    clear: true,
+    clearAll: true,
+    source: "Codex"
+  });
+
+  assert.equal(payload.clear, true);
+  assert.equal(payload.clearAll, true);
+  assert.equal(payload.body, "");
+});
+
 test("bridge writes credentials and forwards authorized bubble messages", async (t) => {
   const dir = tempDir(t);
   const received = [];

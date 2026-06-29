@@ -15,6 +15,7 @@ function usage() {
     "  --thread-id <id>",
     "  --ttl <milliseconds>",
     "  --clear",
+    "  --clear-all",
     "  --stdin",
     "  --quiet",
     "  --help"
@@ -62,6 +63,9 @@ function parseArgs(argv) {
       index += 1;
     } else if (arg === "--clear") {
       options.clear = true;
+    } else if (arg === "--clear-all") {
+      options.clear = true;
+      options.clearAll = true;
     } else if (arg === "--stdin") {
       options.stdin = true;
     } else if (arg === "--quiet" || arg === "-q") {
@@ -93,6 +97,7 @@ async function main() {
     source: options.source,
     threadId: options.threadId,
     clear: options.clear,
+    clearAll: options.clearAll,
     level: options.level,
     title: options.title,
     body,
